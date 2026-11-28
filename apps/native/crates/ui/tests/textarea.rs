@@ -1,6 +1,6 @@
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::AnyWindowHandle;
-use moduo_ui::gpui::{self, div, prelude::*, AppContext as _, Context, Entity, TestAppContext, Window};
+use moduo_ui::gpui::{self, div, prelude::*, Context, Entity, TestAppContext, Window};
 use moduo_ui::primitives::TextField;
 
 struct Composer {
@@ -9,7 +9,13 @@ struct Composer {
 
 impl Render for Composer {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        div().w_64().debug_selector(|| "composer".into()).child(self.field.clone())
+        // Inside a column, so the box is as tall as the field and not the window.
+        div().flex().flex_col().child(
+            div()
+                .w_64()
+                .debug_selector(|| "composer".into())
+                .child(self.field.clone()),
+        )
     }
 }
 
@@ -18,7 +24,7 @@ fn grows_with_its_content_up_to_the_cap(cx: &mut TestAppContext) {
     cx.update(moduo_ui::init);
     let window = cx.add_window(|window, cx| {
         let field = cx.new(|cx| TextField::multi_line("composer-field", 1, 4, window, cx));
-        cx.new(|_| Composer { field })
+        Composer { field }
     });
     let handle: AnyWindowHandle = window.into();
     let mut cx = gpui::VisualTestContext::from_window(handle, cx);
@@ -34,7 +40,10 @@ fn grows_with_its_content_up_to_the_cap(cx: &mut TestAppContext) {
     });
     cx.run_until_parked();
     let three = cx.debug_bounds("composer").unwrap().size.height;
-    assert!(three > one, "three lines {three:?} are not taller than one {one:?}");
+    assert!(
+        three > one,
+        "three lines {three:?} are not taller than one {one:?}"
+    );
     cx.update(|window, cx| {
         for line in ["four", "five", "six", "seven"] {
             window.press("shift-enter", cx);
@@ -48,5 +57,9 @@ fn grows_with_its_content_up_to_the_cap(cx: &mut TestAppContext) {
         window.input("eight", cx);
     });
     cx.run_until_parked();
-    assert_eq!(cx.debug_bounds("composer").unwrap().size.height, capped, "stops growing at four rows");
+    assert_eq!(
+        cx.debug_bounds("composer").unwrap().size.height,
+        capped,
+        "stops growing at four rows"
+    );
 }
