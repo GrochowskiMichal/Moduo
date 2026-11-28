@@ -48,10 +48,16 @@ pub enum ButtonSize {
     Lg,
     /// Square, an icon alone.
     Icon,
+    /// Square at the small rung.
+    IconSm,
 }
 
 impl ButtonSize {
     pub const ALL: [ButtonSize; 4] = [Self::Sm, Self::Md, Self::Lg, Self::Icon];
+
+    fn is_icon(self) -> bool {
+        matches!(self, Self::Icon | Self::IconSm)
+    }
 }
 
 #[derive(IntoElement)]
@@ -65,6 +71,7 @@ pub struct Button {
     loading: bool,
     disabled: bool,
     invalid: bool,
+    tooltip: Option<SharedString>,
     on_click: Option<OnPress>,
 }
 
@@ -80,6 +87,7 @@ impl Button {
             loading: false,
             disabled: false,
             invalid: false,
+            tooltip: None,
             on_click: None,
         }
     }
@@ -128,6 +136,12 @@ impl Button {
 
     pub fn invalid(mut self, invalid: bool) -> Self {
         self.invalid = invalid;
+        self
+    }
+
+    /// A tooltip after the hover delay.
+    pub fn tooltip(mut self, text: impl Into<SharedString>) -> Self {
+        self.tooltip = Some(text.into());
         self
     }
 
@@ -194,7 +208,7 @@ impl RenderOnce for Button {
         let press = if busy { None } else { self.on_click.clone() };
         let (el, _) = pressable(self.id.clone(), self.disabled, press, window, cx);
         let height = match self.size {
-            ButtonSize::Sm => theme::px(cx, Token::CtrlHSm),
+            ButtonSize::Sm | ButtonSize::IconSm => theme::px(cx, Token::CtrlHSm),
             ButtonSize::Md | ButtonSize::Icon => theme::px(cx, Token::CtrlH),
             ButtonSize::Lg => theme::px(cx, Token::CtrlHLg),
         };
@@ -222,9 +236,17 @@ impl RenderOnce for Button {
                     .border_color(theme::color(cx, Token::Hairline))
             })
             .when(self.disabled, |el| el.opacity(0.5))
-            .when(self.invalid, |el| el.shadow(vec![invalid_ring(cx)]));
+            .when(self.invalid, |el| el.shadow(vec![invalid_ring(cx)]))
+            // An icon alone is read by its label.
+            .when(self.size.is_icon(), |el| {
+                el.when_some(self.label.clone(), |el, name| el.aria_label(name))
+            })
+            .when_some(self.tooltip.clone(), |el, t| {
+                el.tooltip(super::tooltip::tooltip(t))
+                    .tooltip_show_delay(super::tooltip::TOOLTIP_DELAY)
+            });
         let el = match self.size {
-            ButtonSize::Icon => el.w(height),
+            ButtonSize::Icon | ButtonSize::IconSm => el.w(height),
             ButtonSize::Sm => el.px(sp(2.5)),
             ButtonSize::Md => el.px(sp(4.)),
             ButtonSize::Lg => el.px(sp(6.)),
@@ -243,9 +265,7 @@ impl RenderOnce for Button {
             }
         };
         let fg = theme::color(cx, Self::foreground(self.variant));
-        let label = (self.size != ButtonSize::Icon)
-            .then_some(self.label)
-            .flatten();
+        let label = (!self.size.is_icon()).then_some(self.label).flatten();
         // Loading keeps the width: a spinner takes the icon's place, or, with no icon, sits over the
         // label, which stays laid out but unseen.
         let el = if !self.loading {
