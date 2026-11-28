@@ -191,68 +191,67 @@ function calcOf(nodes: ValueNode[], prop: string): Expr {
   return left;
 }
 
+function wordOf(value: string, prop: string): Expr {
+  const parsed = valueParser.unit(value);
+  if (parsed && parsed.number !== "" && !Number.isNaN(Number(parsed.number))) {
+    return { num: Number(parsed.number), unit: parsed.unit };
+  }
+  if (value.startsWith("#")) fail(prop, "hex colours are not tokens; use oklch()");
+  const lower = value.toLowerCase();
+  return KEYWORDS.has(lower) ? { keyword: lower } : { word: value };
+}
+
+function varOf(nodes: ValueNode[], prop: string): Expr {
+  const [first = [], fallback] = groups(nodes, ",");
+  const ref = first[0];
+  if (ref?.type !== "word" || !ref.value.startsWith("--")) fail(prop, "var() needs a --name");
+  const e: Expr = { var: ref.value.slice(2) };
+  return fallback && fallback.length > 0 ? { ...e, fallback: listOf(fallback, prop) } : e;
+}
+
+function mixOf(nodes: ValueNode[], prop: string): Expr {
+  const [space = [], a = [], b = []] = groups(nodes, ",");
+  if (space[0]?.type !== "word" || space[0].value !== "in" || !space[1]) {
+    fail(prop, "color-mix() needs 'in <space>'");
+  }
+  const side = (part: ValueNode[]) => {
+    const pct = part.find((n) => n.type === "word" && n.value.endsWith("%"));
+    const color = part.filter((n) => n !== pct);
+    if (color.length !== 1) fail(prop, "color-mix() takes one colour per side");
+    return { color: exprOf(color[0]!, prop), pct: pct ? percentOf(pct, prop) : null };
+  };
+  const l = side(a);
+  const r = side(b);
+  const name = (space[1] as { value: string }).value;
+  return { mix: { space: name, a: l.color, pa: l.pct, b: r.color, pb: r.pct } };
+}
+
+/** The functions a token may use, each to its expression. Anything else fails the export. */
+const FUNCTIONS: Record<string, (nodes: ValueNode[], prop: string) => Expr> = {
+  oklch: (n, p) => ({ oklch: colorArgs(n, p, "oklch") }),
+  rgb: (n, p) => ({ rgb: colorArgs(n, p, "rgb") }),
+  rgba: (n, p) => ({ rgb: colorArgs(n, p, "rgb") }),
+  hsl: (n, p) => ({ hsl: colorArgs(n, p, "hsl") }),
+  hsla: (n, p) => ({ hsl: colorArgs(n, p, "hsl") }),
+  var: varOf,
+  "color-mix": mixOf,
+  calc: (n, p) => {
+    // A binary calc is already {calc:{op,l,r}}; a lone operand is wrapped once.
+    const e = calcOf(n, p);
+    return "calc" in e ? e : { calc: e };
+  },
+  "cubic-bezier": (n, p) => ({ bezier: groups(n, ",").map((g) => numberOf(g[0], p)) }),
+};
+
 function exprOf(node: ValueNode, prop: string): Expr {
   if (node.type === "string") return { string: node.value };
-  if (node.type === "word") {
-    const parsed = valueParser.unit(node.value);
-    if (parsed && parsed.number !== "" && !Number.isNaN(Number(parsed.number))) {
-      return { num: Number(parsed.number), unit: parsed.unit };
-    }
-    if (node.value.startsWith("#")) fail(prop, "hex colours are not tokens; use oklch()");
-    const lower = node.value.toLowerCase();
-    return KEYWORDS.has(lower) ? { keyword: lower } : { word: node.value };
-  }
+  if (node.type === "word") return wordOf(node.value, prop);
   if (node.type !== "function") fail(prop, `unexpected "${valueParser.stringify(node)}"`);
   const name = node.value.toLowerCase();
-  switch (name) {
-    case "oklch":
-      return { oklch: colorArgs(node.nodes, prop, name) };
-    case "rgb":
-    case "rgba":
-      return { rgb: colorArgs(node.nodes, prop, "rgb") };
-    case "hsl":
-    case "hsla":
-      return { hsl: colorArgs(node.nodes, prop, "hsl") };
-    case "var": {
-      const [first = [], fallback] = groups(node.nodes, ",");
-      const ref = first[0];
-      if (ref?.type !== "word" || !ref.value.startsWith("--")) fail(prop, "var() needs a --name");
-      const e: Expr = { var: ref.value.slice(2) };
-      return fallback && fallback.length > 0 ? { ...e, fallback: listOf(fallback, prop) } : e;
-    }
-    case "color-mix": {
-      const [space = [], a = [], b = []] = groups(node.nodes, ",");
-      if (space[0]?.type !== "word" || space[0].value !== "in" || !space[1])
-        fail(prop, "color-mix() needs 'in <space>'");
-      const side = (nodes: ValueNode[]) => {
-        const pct = nodes.find((n) => n.type === "word" && n.value.endsWith("%"));
-        const color = nodes.filter((n) => n !== pct);
-        if (color.length !== 1) fail(prop, "color-mix() takes one colour per side");
-        return { color: exprOf(color[0]!, prop), pct: pct ? percentOf(pct, prop) : null };
-      };
-      const l = side(a);
-      const r = side(b);
-      return {
-        mix: {
-          space: (space[1] as { value: string }).value,
-          a: l.color,
-          pa: l.pct,
-          b: r.color,
-          pb: r.pct,
-        },
-      };
-    }
-    case "calc": {
-      // A binary calc is already {calc:{op,l,r}}; a lone operand is wrapped once.
-      const e = calcOf(node.nodes, prop);
-      return "calc" in e ? e : { calc: e };
-    }
-    case "cubic-bezier":
-      return { bezier: groups(node.nodes, ",").map((g) => numberOf(g[0], prop)) };
-    default:
-      if (RAW_FUNCTIONS.has(name)) return { raw: valueParser.stringify(node) };
-      fail(prop, `unknown function ${name}()`);
-  }
+  const read = FUNCTIONS[name];
+  if (read) return read(node.nodes, prop);
+  if (RAW_FUNCTIONS.has(name)) return { raw: valueParser.stringify(node) };
+  return fail(prop, `unknown function ${name}()`);
 }
 
 function listOf(nodes: ValueNode[], prop: string): Expr {
