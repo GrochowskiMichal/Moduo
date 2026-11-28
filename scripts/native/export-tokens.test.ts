@@ -9,7 +9,11 @@ import { exportTokens, TOKENS_CSS, TOKENS_JSON } from "./export-tokens";
 const root = join(import.meta.dir, "../..");
 const css = readFileSync(join(root, TOKENS_CSS), "utf8");
 
-type Layer = { when: Record<string, unknown>[]; media?: Record<string, string>; set: Record<string, unknown> };
+type Layer = {
+  when: Record<string, unknown>[];
+  media?: Record<string, string>;
+  set: Record<string, unknown>;
+};
 
 describe("tokens.json", () => {
   it("the committed tokens.json matches tokens.css", () => {
@@ -24,7 +28,8 @@ describe("tokens.json", () => {
     const exported = new Set(exportTokens(css).layers.flatMap((l: Layer) => Object.keys(l.set)));
     expect([...declared].filter((n) => !exported.has(n))).toEqual([]);
     expect([...exported].filter((n) => !declared.has(n))).toEqual([]);
-    expect(declared.size).toBeGreaterThan(250);
+    // A floor against an export that silently reads nothing: 238 names today (456 definitions).
+    expect(declared.size).toBeGreaterThan(200);
   });
 
   it("keeps layers in source order, so a later layer wins", () => {
@@ -49,7 +54,15 @@ describe("tokens.json", () => {
         when: [{}],
         set: {
           a: { oklch: [0.5, 0.1, 200, 0.4] },
-          b: { mix: { space: "oklab", a: { var: "a" }, pa: 13, b: { keyword: "transparent" }, pb: null } },
+          b: {
+            mix: {
+              space: "oklab",
+              a: { var: "a" },
+              pa: 13,
+              b: { keyword: "transparent" },
+              pb: null,
+            },
+          },
           c: { calc: { op: "*", l: { var: "d" }, r: { num: 5, unit: "" } } },
           d: { num: 1.25, unit: "rem" },
           e: { num: 180, unit: "ms" },
