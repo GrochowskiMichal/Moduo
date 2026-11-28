@@ -71,12 +71,22 @@ function splitTopLevel(text: string, sep: string): string[] {
 }
 
 const ATTRIBUTE = /^\[data-([\w-]+)(?:="([^"]*)")?\]/;
+/** The appearance axes the native app knows; a typo here would make a layer that never applies. */
+const AXES = new Set(["theme", "shade", "accent", "density", "radius", "font", "motion", "label"]);
+
+/** A selector's specificity in attribute-class units; :where() counts nothing, as in CSS. */
+function specificityOf(selector: string): number {
+  const plain = selector.replace(/:where\([^)]*\)/g, "");
+  return (plain.match(/\[data-|:root/g) ?? []).length;
+}
 
 /** One selector (no commas) → the conditions it stands for (several only for :where). */
 function conditionsOf(selector: string): Condition[] {
   let rest = selector.trim();
   let conditions: Condition[] = [{}];
   const add = (axis: string, test: AxisTest) => {
+    if (!AXES.has(axis))
+      throw new Error(`tokens.css: "data-${axis}" in "${selector}" is not an appearance axis`);
     conditions = conditions.map((c) => ({ ...c, [axis]: test }));
   };
   while (rest.length > 0) {
@@ -151,14 +161,30 @@ function colorArgs(
   name: string,
 ): [number, number, number, number] {
   const [channels = [], alpha = []] = groups(nodes, "/");
-  const flat = channels.length === 1 ? groups(nodes, ",").flat() : channels;
-  if (flat.length !== 3) fail(prop, `${name}() takes three channels`);
-  const raw = (n: ValueNode) =>
-    Number(valueParser.unit((n as { value: string }).value || "")?.number ?? NaN);
-  // oklch's lightness and rgb's channels keep their CSS scale; a "%" lightness becomes 0–1.
-  const values = flat.map((n, i) => (name === "oklch" && i === 0 ? numberOf(n, prop) : raw(n)));
-  if (values.some((v) => Number.isNaN(v)))
-    fail(prop, `${name}() has a channel that is not a number`);
+  if (channels.length !== 3) fail(prop, `${name}() takes three space-separated channels`);
+  // Each channel keeps its CSS scale, so only the units that scale is written in pass:
+  // oklch L may be a percentage (it becomes 0–1), hsl's S and L are percentages (kept 0–100),
+  // a hue may say deg. Anything else would be read at the wrong scale, so it fails.
+  const allowed: Record<string, string[][]> = {
+    oklch: [["", "%"], [""], ["", "deg"]],
+    rgb: [[""], [""], [""]],
+    hsl: [["", "deg"], ["%"], ["%"]],
+  };
+  const values = channels.map((n, i) => {
+    const parsed = n.type === "word" ? valueParser.unit(n.value) : false;
+    if (
+      !parsed ||
+      Number.isNaN(Number(parsed.number)) ||
+      !allowed[name]![i]!.includes(parsed.unit)
+    ) {
+      fail(
+        prop,
+        `${name}() channel ${i + 1} "${valueParser.stringify(n)}" is not in a unit it can read`,
+      );
+    }
+    const v = Number(parsed.number);
+    return name === "oklch" && i === 0 && parsed.unit === "%" ? v / 100 : v;
+  });
   const a = alpha.length > 0 ? numberOf(alpha[0], prop) : 1;
   return [values[0]!, values[1]!, values[2]!, a];
 }
@@ -211,7 +237,8 @@ function varOf(nodes: ValueNode[], prop: string): Expr {
 
 function mixOf(nodes: ValueNode[], prop: string): Expr {
   const [space = [], a = [], b = []] = groups(nodes, ",");
-  if (space[0]?.type !== "word" || space[0].value !== "in" || !space[1]) {
+  // A hue method ("in oklch longer hue") would be lost: refuse it until the resolver knows it.
+  if (space[0]?.type !== "word" || space[0].value !== "in" || !space[1] || space.length !== 2) {
     fail(prop, "color-mix() needs 'in <space>'");
   }
   const side = (part: ValueNode[]) => {
@@ -270,12 +297,23 @@ function listOf(nodes: ValueNode[], prop: string): Expr {
 
 export function exportTokens(css: string): TokensExport {
   const layers: Layer[] = [];
+  // The JSON carries no specificity: the resolver applies layers in order, so a later layer must
+  // never be outranked by an earlier one that sets the same property, or the browser and the
+  // native app would disagree. The export refuses that instead.
+  const rank = new Map<string, { max: number; selector: string }>();
   const visit = (rule: Rule, media?: Record<string, string>) => {
-    const when = splitTopLevel(rule.selector, ",").flatMap(conditionsOf);
+    const selectors = splitTopLevel(rule.selector, ",");
+    const when = selectors.flatMap(conditionsOf);
+    const lowest = Math.min(...selectors.map(specificityOf));
+    const highest = Math.max(...selectors.map(specificityOf));
     const set: Record<string, Expr> = {};
     const props: Record<string, string> = {};
     rule.each((child) => {
-      if (child.type !== "decl") return;
+      if (child.type === "comment") return;
+      if (child.type !== "decl") {
+        throw new Error(`tokens.css: a nested ${child.type} in "${rule.selector}" is not read`);
+      }
+      if (child.important) throw new Error(`tokens.css: !important on ${child.prop} is not read`);
       if (STANDARD_PROPS.has(child.prop)) {
         props[child.prop] = child.value.trim();
         return;
@@ -286,6 +324,14 @@ export function exportTokens(css: string): TokensExport {
         );
       }
       const prop = child.prop.slice(2);
+      const earlier = rank.get(prop);
+      if (earlier && lowest < earlier.max) {
+        throw new Error(
+          `tokens.css: --${prop} in "${rule.selector}" comes later but is outranked by "${earlier.selector}"`,
+        );
+      }
+      if (!earlier || highest >= earlier.max)
+        rank.set(prop, { max: highest, selector: rule.selector });
       set[prop] = listOf(valueParser(child.value).nodes, prop);
     });
     if (Object.keys(set).length === 0 && Object.keys(props).length === 0) return;
@@ -302,6 +348,8 @@ export function exportTokens(css: string): TokensExport {
       const media = mediaOf(at.params);
       at.each((child) => {
         if (child.type === "rule") visit(child, media);
+        else if (child.type !== "comment")
+          throw new Error(`tokens.css: @${child.type} inside @media is not read`);
       });
     }
   });
@@ -327,6 +375,7 @@ if (import.meta.main) {
   } else {
     writeFileSync(out, next);
     // Leave it the way `bun fmt --check` (part of verify) wants it.
-    Bun.spawnSync(["bun", "fmt", out]);
+    if (Bun.spawnSync(["bun", "fmt", out]).exitCode !== 0)
+      console.error(`bun fmt failed on ${TOKENS_JSON}`);
   }
 }
