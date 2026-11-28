@@ -22,17 +22,30 @@ pub fn init(cx: &mut App) {
     cx.set_global(Io(runtime));
 }
 
+/// Aborts the tokio side when the GPUI task is dropped, so a view that goes away cancels its work.
+struct AbortOnDrop(tokio::task::AbortHandle);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
 /// Runs `future` on tokio and hands its output back as a GPUI task (await it in `cx.spawn`).
+/// Dropping the task cancels the future. A panic on tokio is raised again where the task is
+/// polled, so it is never swallowed.
 pub fn spawn_io<T: Send + 'static>(
     cx: &App,
     future: impl Future<Output = T> + Send + 'static,
 ) -> Task<T> {
     let handle = cx.global::<Io>().0.spawn(future);
+    let abort = AbortOnDrop(handle.abort_handle());
     cx.background_executor().spawn(async move {
+        let _abort = abort;
         match handle.await {
             Ok(value) => value,
-            // A panic on tokio surfaces where the result was awaited.
-            Err(err) => std::panic::resume_unwind(err.into_panic()),
+            Err(err) if err.is_panic() => std::panic::resume_unwind(err.into_panic()),
+            Err(_) => panic!("the tokio runtime stopped before an io task finished"),
         }
     })
 }

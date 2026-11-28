@@ -24,10 +24,13 @@ pub fn run() {
             std::process::exit(2);
         }
     };
-    let data_dir = identity::current_data_dir().expect("HOME is set");
+    let Some(data_dir) = identity::current_data_dir() else {
+        eprintln!("moduo: HOME is not set, so there is no data folder");
+        std::process::exit(2);
+    };
     logging::init(&data_dir);
-    let listener = match instance::claim(&data_dir) {
-        Ok(instance::Claim::First(listener)) => Some(listener),
+    let owner = match instance::claim(&data_dir) {
+        Ok(instance::Claim::First(owner)) => Some(owner),
         Ok(instance::Claim::Second) => {
             tracing::info!("another launch owns the app; it was brought forward");
             return;
@@ -43,8 +46,8 @@ pub fn run() {
         moduo_ui::init(cx);
         runtime::init(cx);
         cx.set_global(CurrentBackend(backend));
-        if let Some(listener) = listener {
-            instance::listen(listener, cx);
+        if let Some(owner) = owner {
+            instance::listen(owner, cx);
         }
         window::open_main_window(cx).expect("the main window opens");
         // No menu bar yet (specs/native-foundation.md, NF-29): closing the window quits.
