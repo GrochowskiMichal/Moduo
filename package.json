@@ -20,6 +20,7 @@
     "dev:desktop:signed": "bun run build:desktop:signed:debug && open ./apps/desktop/src-tauri/target/debug/bundle/macos/moduo.app",
     "native:dev": "cd apps/native && cargo run -p moduo-app",
     "native:tokens": "bun scripts/native/export-tokens.ts",
+    "native:golden": "bun scripts/native/tokens-golden.ts",
     "native:check": "cd apps/native && cargo fmt --all --check && cargo clippy --locked --all-targets -- -D warnings && cargo test --locked",
     "build:web": "bun run --cwd apps/app build",
     "build:desktop:web": "bun run --cwd apps/app build:desktop",

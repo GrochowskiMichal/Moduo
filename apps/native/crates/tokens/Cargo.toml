@@ -1,6 +1,6 @@
 [package]
 name = "moduo-tokens"
-description = "Moduo's design tokens, exported from apps/app/src/styles/tokens.css."
+description = "Moduo's design tokens, exported from apps/app/src/styles/tokens.css, resolved per appearance."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -9,3 +9,11 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[build-dependencies]
+serde_json = "1"
+
+[dev-dependencies]
+serde_json = "1"

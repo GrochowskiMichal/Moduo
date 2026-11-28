@@ -247,7 +247,7 @@ Mike runs engineer mode; these are the technical calls, each recorded as a dated
 - **Start here:**
   - Input: `apps/native/crates/tokens/tokens.json` through `include_str!`, parsed once (as `apps/desktop/src-tauri/src/mail/contracts.rs:2,56` does for `mail-local.json`).
   - Shape: the types at the top of `scripts/native/export-tokens.ts`. Layers in source order; `when` lists alternatives, each mapping an axis to a value, `"*"` (present) or `{not}`; `media` holds media features; oklch L and alpha are 0–1, mix percentages 0–100 or null; shadows and font stacks are `{list}`.
-  - API: `Tokens::resolve(&Appearance) -> Resolved`; typed getters from the token names (`color(Color::Primary)`, `px(Size::CtrlH)`, `duration(Motion::Fast)`, `shadow(Shadow::Md)`, `z(Z::Popover)`), plus `alpha(color, pct)` for `/90`-style modifiers (`docs/DESIGN_RULES.md:87-93`).
+  - API: `Tokens::resolve(&Appearance) -> Resolved`; getters by kind (`color`, `px`, `ms`, `number`, `shadows`, `fonts`, `bezier`) that take a `Token`, an enum `build.rs` generates from `tokens.json` (`Token::Primary`, `Token::CtrlH`), so a name is checked at compile time; `Rgba::alpha(pct)` for `/90`-style modifiers (`docs/DESIGN_RULES.md:87-93`).
   - Colour maths, written here with unit tests: oklch → oklab → linear sRGB → sRGB with gamut clipping; `color-mix` in oklab (23 uses, `tokens.css:460-514`) and in oklch (4 uses, :165, :175-177) with premultiplied alpha, as CSS Color 4 defines.
   - Golden fixture: `scripts/native/tokens-golden.ts` loads `tokens.css` in Playwright Chromium, sets the `data-*` attributes for six appearances (dark default; light; dark + warm + violet; dark + dense + sharp; light + mono; dark + reduced motion) and writes each token's computed value to `crates/tokens/tests/golden.json` (committed).
   - The 6 attributes and their values: `tokens.css:8-14`.
@@ -255,7 +255,7 @@ Mike runs engineer mode; these are the technical calls, each recorded as a dated
 - **Traps:**
   - Apply layers in order (the export guarantees no earlier layer outranks a later one); a layer applies when any `when` alternative matches and every `media` feature holds.
   - State-layer colours are translucent on purpose (`.claude/rules/ui-css.md:35,38`): keep alpha, never pre-flatten onto a background.
-  - rem is 16 px times the text-size setting; resolve rem at run time, not at parse time.
+  - rem is 16 px: the text-size setting was retired (`tokens.css:15`).
   - Every `.rs` file stays under 32 KB (`scripts/ci/ratchets.ts:32`).
 - **Not in this block:** Applying tokens to the kit's theme (NF-7). Label colours per `data-label` are resolved on demand by `label(name)`, same crate.
 
