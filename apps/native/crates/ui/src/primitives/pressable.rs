@@ -4,7 +4,13 @@
 
 use std::rc::Rc;
 
-use gpui_kit::{div, prelude::*, App, Div, ElementId, FocusHandle, MouseButton, Stateful, Window};
+use gpui_kit::TestSupportExt as _;
+use gpui_kit::{
+    div, prelude::*, App, Div, ElementId, FocusHandle, MouseButton, Role, Stateful, Window,
+};
+
+/// The element every pressable control builds on (observed, so tests can find it by id).
+pub(crate) type Pressable = gpui_kit::base::test_support::Observed<Stateful<Div>>;
 
 /// A press handler.
 pub type OnPress = Rc<dyn Fn(&mut Window, &mut App)>;
@@ -15,12 +21,17 @@ pub(crate) fn pressable(
     on_press: Option<OnPress>,
     window: &mut Window,
     cx: &mut App,
-) -> (Stateful<Div>, FocusHandle) {
+) -> (Pressable, FocusHandle) {
     let handle = window
         .use_keyed_state(id.clone(), cx, |_, cx| cx.focus_handle())
         .read(cx)
         .clone();
-    let el = div().id(id).track_focus(&handle);
+    // `test_support` is inert outside tests; it lets a test find the control by its id.
+    let el = div()
+        .id(id)
+        .test_support()
+        .role(Role::Button)
+        .track_focus(&handle);
     if disabled {
         return (el, handle);
     }
