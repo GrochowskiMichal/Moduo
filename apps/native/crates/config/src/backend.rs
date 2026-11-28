@@ -47,12 +47,15 @@ pub struct Baked {
     pub key: Option<&'static str>,
 }
 
+/// Looks a value up by name: an environment variable, or one of the repo's env files.
+pub type Lookup<'a> = Box<dyn Fn(&str) -> Option<String> + 'a>;
+
 /// Everything the resolution reads, so tests can supply it.
 pub struct Sources<'a> {
     pub args: &'a [&'a str],
-    pub env: Box<dyn Fn(&str) -> Option<String> + 'a>,
+    pub env: Lookup<'a>,
     /// Reads one of the repo's env files by name, when there is a repo.
-    pub file: Box<dyn Fn(&str) -> Option<String> + 'a>,
+    pub file: Lookup<'a>,
     pub baked: Baked,
 }
 
