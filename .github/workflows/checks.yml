@@ -418,6 +418,9 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --locked --all-targets -- -D warnings
 
+      - name: cargo check (app build, no test-support)
+        run: cargo check --locked --workspace
+
       - name: cargo test
         run: cargo test --locked
 
