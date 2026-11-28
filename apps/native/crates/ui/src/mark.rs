@@ -3,7 +3,7 @@
 use gpui_kit::{prelude::*, px, svg, App, Window};
 
 use crate::icon::IconSize;
-use crate::theme::ActiveTokens;
+use crate::theme;
 
 /// The mark's asset path.
 pub const MODUO_MARK_PATH: &str = "brand/moduo-mark.svg";
@@ -22,7 +22,7 @@ impl ModuoMark {
 
 impl RenderOnce for ModuoMark {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let size = px(self.size.px(&cx.global::<ActiveTokens>().0));
+        let size = px(self.size.px(theme::tokens(cx)));
         svg()
             .path(MODUO_MARK_PATH)
             .size(size)

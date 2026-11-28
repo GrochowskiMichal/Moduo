@@ -22,14 +22,20 @@ pub mod gpui {
     mod component {}
 }
 
+/// The design tokens, as the rest of the app names them.
+pub use moduo_tokens as tokens;
+
 pub mod assets;
+pub mod focus;
 pub mod fonts;
 pub mod icon;
 pub mod mark;
+pub mod motion;
+pub mod style;
 pub mod text;
 pub mod theme;
 
-use gpui_kit::component::{ActiveTheme as _, Theme, ThemeMode};
+use gpui_kit::component::ActiveTheme as _;
 
 use crate::gpui::{AnyWindowHandle, App, Application, Entity, Hsla, Render, Window, WindowOptions};
 
@@ -38,12 +44,12 @@ pub fn application() -> Application {
     gpui_kit::application().with_assets(assets::Assets)
 }
 
-/// Call once, before anything is drawn. Dark until the tokens drive the theme.
+/// Call once, before anything is drawn: the component library, the fonts and the default
+/// appearance.
 pub fn init(cx: &mut App) {
     gpui_kit::init(cx);
     fonts::load(cx);
     theme::init(cx);
-    Theme::change(ThemeMode::Dark, None, cx);
 }
 
 /// Opens a window whose content is `build`'s view, under the layer that hosts

@@ -3,7 +3,7 @@
 use gpui_kit::{prelude::*, px, svg, App, Hsla, Window};
 use moduo_tokens::{Resolved, Token};
 
-use crate::theme::ActiveTokens;
+use crate::theme;
 
 include!(concat!(env!("OUT_DIR"), "/icon_name.rs"));
 
@@ -68,7 +68,7 @@ impl Icon {
 
 impl RenderOnce for Icon {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let size = px(self.size.px(&cx.global::<ActiveTokens>().0));
+        let size = px(self.size.px(theme::tokens(cx)));
         let color = self.color.unwrap_or_else(|| window.text_style().color);
         svg()
             .path(self.name.path())
