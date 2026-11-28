@@ -41,6 +41,9 @@ const TIER2_FIXTURES = [
   "apps/desktop/src-tauri/capabilities/default.json",
   ".claude/hooks/guard-git.sh",
   ".claude/settings.json",
+  "apps/native/crates/auth/src/session.rs",
+  "apps/native/crates/config/src/lib.rs",
+  "apps/native/Cargo.toml",
 ];
 
 describe("paths → tier", () => {
