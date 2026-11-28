@@ -250,8 +250,9 @@ jobs:
               apps/desktop/src-tauri/*) rust=true ;;
             esac
             case "$f" in
-              # The native app, and the two sources its exported JSON comes from (NF-3, NT-1).
-              apps/native/*|apps/app/src/styles/tokens.css|supabase/functions/_shared/contracts/*) native=true ;;
+              # The native app (its exported tokens.json lives inside it), and the contracts export
+              # it reads (NT-1). A tokens.css edit without a fresh export fails verify instead.
+              apps/native/*|supabase/functions/_shared/contracts/tasks-native.json) native=true ;;
             esac
             case "$f" in
               # The web app, what it imports through aliases, and the toolchain it builds with.

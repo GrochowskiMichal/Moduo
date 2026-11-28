@@ -71,6 +71,7 @@ export const TIER2: readonly Tier2Rule[] = [
   { glob: "apps/native/crates/auth/**", why: "native auth" },
   { glob: "apps/native/crates/config/**", why: "native identity and keys" },
   { glob: "apps/native/Cargo.toml", why: "native dependency pins" },
+  { glob: "apps/native/Cargo.lock", why: "native dependency pins" },
 ];
 
 export function globToRegExp(glob: string): RegExp {

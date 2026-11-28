@@ -206,7 +206,7 @@ Mike runs engineer mode; these are the technical calls, each recorded as a dated
 
 - **Goal:** A pull request or push that changes `apps/native` runs the native gate in CI, and the review tier knows the native paths that carry risk.
 - **Acceptance criteria:** AC1 (its part) — CI runs `bun run native:check` whenever `apps/native` changes.
-- **Tests:** `scripts/ci/tier.test.ts` · "native auth and config paths are tier 2" (new); the workflow itself is proved by its first green run on the PR.
+- **Tests:** `scripts/ci/tier.test.ts` · the native paths in `TIER2_FIXTURES`; `scripts/ci/config-traps.test.ts` · "runs the native app's gate when apps/native changes" · "keeps native:check and the CI job running the same commands". `checks.yml` runs only on PRs into develop and on pushes, so the job itself is proved by its first green run on the push to `mike` after the merge.
 - **Start here:**
   - `.github/workflows/checks.yml`: `oracle-paths` outputs at :208-211 and the case at :239-250 (add a `native` output for `apps/native/*`, `apps/app/src/styles/tokens.css` and `supabase/functions/_shared/contracts/*`); model the job on `rust-check` at :328-374; add it to `static-checks` needs at :474 and the result line at :491; update the header comment at :20-23.
   - Job: `runs-on: macos-latest`, toolchain read from `apps/native/rust-toolchain.toml` as :345-353 does, Swatinem cache with `workspaces: apps/native` and its own `shared-key`, saved on push only, then the three commands of `native:check` with `--locked`.
