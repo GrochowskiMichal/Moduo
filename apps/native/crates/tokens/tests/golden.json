@@ -1,0 +1,5718 @@
+{
+  "viewport": {
+    "width": 1280,
+    "height": 840
+  },
+  "appearances": [
+    {
+      "name": "dark",
+      "attrs": {
+        "theme": "dark",
+        "shade": "black",
+        "accent": "mono",
+        "density": "comfortable",
+        "radius": "soft",
+        "font": "geist"
+      }
+    },
+    {
+      "name": "light",
+      "attrs": {
+        "theme": "light",
+        "shade": "black",
+        "accent": "mono",
+        "density": "comfortable",
+        "radius": "soft",
+        "font": "geist"
+      }
+    },
+    {
+      "name": "dark-warm-violet",
+      "attrs": {
+        "theme": "dark",
+        "shade": "warm",
+        "accent": "violet",
+        "density": "comfortable",
+        "radius": "soft",
+        "font": "geist"
+      }
+    },
+    {
+      "name": "dark-dense-sharp",
+      "attrs": {
+        "theme": "dark",
+        "shade": "black",
+        "accent": "mono",
+        "density": "dense",
+        "radius": "sharp",
+        "font": "geist"
+      }
+    },
+    {
+      "name": "light-mono",
+      "attrs": {
+        "theme": "light",
+        "shade": "black",
+        "accent": "mono",
+        "density": "comfortable",
+        "radius": "soft",
+        "font": "geist"
+      }
+    },
+    {
+      "name": "dark-reduced-motion",
+      "attrs": {
+        "theme": "dark",
+        "shade": "black",
+        "accent": "mono",
+        "density": "comfortable",
+        "radius": "soft",
+        "font": "geist",
+        "motion": "reduced"
+      }
+    }
+  ],
+  "tokens": {
+    "dark": {
+      "accent": {
+        "text": "oklch(0.22  0 0)",
+        "color": [0.103938, 0.103965, 0.103968, 1]
+      },
+      "accent-foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "amber-active": {
+        "text": "oklch(0.74 0.16 75)",
+        "color": [0.895885, 0.601328, -0.0782217, 1]
+      },
+      "amber-base": {
+        "text": "oklch(0.80 0.16 75)",
+        "color": [0.975754, 0.676548, 0.147226, 1]
+      },
+      "amber-hover": {
+        "text": "oklch(0.85 0.16 75)",
+        "color": [1.04312, 0.740142, 0.243151, 1]
+      },
+      "avatar-feed": {
+        "text": "2rem",
+        "px": 32
+      },
+      "avatar-radius": {
+        "text": "9999px",
+        "px": 9999
+      },
+      "background": {
+        "text": "oklch(0 0 0)",
+        "color": [0, 0, 0, 1]
+      },
+      "bar-h": {
+        "text": "3rem",
+        "px": 48
+      },
+      "blue-active": {
+        "text": "oklch(0.60 0.18 245)",
+        "color": [-0.200414, 0.524093, 0.889089, 1]
+      },
+      "blue-base": {
+        "text": "oklch(0.66 0.18 245)",
+        "color": [-0.150534, 0.599266, 0.970115, 1]
+      },
+      "blue-hover": {
+        "text": "oklch(0.72 0.18 245)",
+        "color": [0.026356, 0.675467, 1.05213, 1]
+      },
+      "board-card-w": {
+        "text": "18.5rem",
+        "px": 296
+      },
+      "board-col-w": {
+        "text": "calc(18.5rem + 0.5rem)",
+        "px": 304
+      },
+      "border": {
+        "text": "oklch(0.22  0 0)",
+        "color": [0.103938, 0.103965, 0.103968, 1]
+      },
+      "bp-2xl": {
+        "text": "1536px",
+        "px": 1536
+      },
+      "bp-lg": {
+        "text": "1024px",
+        "px": 1024
+      },
+      "bp-md": {
+        "text": "768px",
+        "px": 768
+      },
+      "bp-sm": {
+        "text": "640px",
+        "px": 640
+      },
+      "bp-xl": {
+        "text": "1280px",
+        "px": 1280
+      },
+      "cal-hour-h": {
+        "text": "3.5rem",
+        "px": 56
+      },
+      "cal-prep-chip-max": {
+        "text": "13.75rem",
+        "px": 220
+      },
+      "cal-zone-gutter-w": {
+        "text": "6.5rem",
+        "px": 104
+      },
+      "card": {
+        "text": "oklch(0.14  0 0)",
+        "color": [0.035442, 0.0354568, 0.0354581, 1]
+      },
+      "card-foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "code-comment": {
+        "text": "oklch(0.72  0 0)",
+        "color": [0.644624, 0.644745, 0.644756, 1]
+      },
+      "code-keyword": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "code-number": {
+        "text": "oklch(0.82 0.15 75)",
+        "color": [0.988912, 0.707733, 0.257336, 1]
+      },
+      "code-string": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "comment-mark-bg": {
+        "text": "color-mix(in oklch, oklch(0.82 0.15 75) 14%, transparent)",
+        "color": [0.988912, 0.707733, 0.257336, 0.14]
+      },
+      "comment-mark-bg-focused": {
+        "text": "color-mix(in oklch, oklch(0.82 0.15 75) 32%, transparent)",
+        "color": [0.988912, 0.707733, 0.257336, 0.32]
+      },
+      "comment-mark-line": {
+        "text": "color-mix(in oklch, oklch(0.82 0.15 75) 75%, transparent)",
+        "color": [0.988911, 0.707733, 0.257336, 0.75]
+      },
+      "control-raised": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 14%, oklch(0.18  0 0))",
+        "color": [0.172105, 0.172145, 0.172148, 1]
+      },
+      "ctrl-h": {
+        "text": "2rem",
+        "px": 32
+      },
+      "ctrl-h-lg": {
+        "text": "2.5rem",
+        "px": 40
+      },
+      "ctrl-h-sm": {
+        "text": "1.625rem",
+        "px": 26
+      },
+      "ctrl-h-xs": {
+        "text": "1.5rem",
+        "px": 24
+      },
+      "danger": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "danger-foreground": {
+        "text": "oklch(0.97 0 0)",
+        "color": [0.960462, 0.960638, 0.960654, 1]
+      },
+      "destructive": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "destructive-foreground": {
+        "text": "oklch(0.15 0 0)",
+        "color": [0.0434721, 0.0434891, 0.0434907, 1]
+      },
+      "ease-in": {
+        "text": "cubic-bezier(0.7, 0, 0.84, 0)"
+      },
+      "ease-in-out": {
+        "text": "cubic-bezier(0.65, 0, 0.35, 1)"
+      },
+      "ease-out": {
+        "text": "cubic-bezier(0.16, 1, 0.3, 1)"
+      },
+      "ease-spring": {
+        "text": "cubic-bezier(0.34, 1.56, 0.64, 1)"
+      },
+      "failed-list-max": {
+        "text": "calc(2rem * 5)",
+        "px": 160
+      },
+      "feed-media-max-h": {
+        "text": "15rem",
+        "px": 240
+      },
+      "feed-media-max-w": {
+        "text": "22.5rem",
+        "px": 360
+      },
+      "feed-person-gap": {
+        "text": "1.125rem",
+        "px": 18
+      },
+      "font-body": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-body-geist": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-body-inter": {
+        "text": "\"Inter\", \"Geist\", system-ui, -apple-system, sans-serif"
+      },
+      "font-body-mono": {
+        "text": "\"Geist Mono\", \"JetBrains Mono\", ui-monospace, SFMono-Regular, Menlo, monospace"
+      },
+      "font-body-serif": {
+        "text": "\"Source Serif Pro\", Georgia, serif"
+      },
+      "font-display": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-display-cal": {
+        "text": "\"Cal Sans\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-display-fraunces": {
+        "text": "\"Fraunces\", \"Source Serif Pro\", Georgia, serif"
+      },
+      "font-display-geist": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-display-pilat": {
+        "text": "\"Pilat Extended\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-mono": {
+        "text": "\"Geist Mono\", \"JetBrains Mono\", ui-monospace, SFMono-Regular, Menlo, monospace"
+      },
+      "font-ui": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-weight-bold": {
+        "text": "700",
+        "number": 700
+      },
+      "font-weight-medium": {
+        "text": "500",
+        "number": 500
+      },
+      "font-weight-regular": {
+        "text": "400",
+        "number": 400
+      },
+      "font-weight-semibold": {
+        "text": "600",
+        "number": 600
+      },
+      "foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "green-active": {
+        "text": "oklch(0.66 0.17 150)",
+        "color": [0.14027, 0.68145, 0.336667, 1]
+      },
+      "green-base": {
+        "text": "oklch(0.72 0.17 150)",
+        "color": [0.248581, 0.75748, 0.40813, 1]
+      },
+      "green-hover": {
+        "text": "oklch(0.78 0.17 150)",
+        "color": [0.33889, 0.834747, 0.480451, 1]
+      },
+      "hairline": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 10%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.1]
+      },
+      "hit-min": {
+        "text": "1.5rem",
+        "px": 24
+      },
+      "hue-spectrum": {
+        "text": "linear-gradient(to right, hsl(0 90% 60%), hsl(60 90% 60%), hsl(120 90% 60%), hsl(180 90% 60%), hsl(240 90% 60%), hsl(300 90% 60%), hsl(359 90% 60%))"
+      },
+      "icon": {
+        "text": "1rem",
+        "px": 16
+      },
+      "icon-lg": {
+        "text": "1.25rem",
+        "px": 20
+      },
+      "icon-sm": {
+        "text": "0.875rem",
+        "px": 14
+      },
+      "icon-xs": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "info": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "info-foreground": {
+        "text": "oklch(0.12 0 0)",
+        "color": [0.0223192, 0.0223284, 0.0223293, 1]
+      },
+      "input": {
+        "text": "oklch(0.18  0 0)",
+        "color": [0.0686772, 0.0686986, 0.0687006, 1]
+      },
+      "label": {
+        "text": "oklch(0.72  0 0)",
+        "color": [0.644624, 0.644745, 0.644756, 1]
+      },
+      "label-fill": {
+        "text": "color-mix(in oklab, oklch(0.72  0 0) 48%, oklch(0.14  0 0))",
+        "color": [0.299968, 0.300029, 0.300035, 1]
+      },
+      "label-surface": {
+        "text": "oklch(0.70 0 0 / 0.16)",
+        "color": [0.620417, 0.620533, 0.620544, 0.16]
+      },
+      "leading-normal": {
+        "text": "1.5",
+        "number": 1.5
+      },
+      "leading-relaxed": {
+        "text": "1.65",
+        "number": 1.65
+      },
+      "leading-snug": {
+        "text": "1.35",
+        "number": 1.35
+      },
+      "leading-tight": {
+        "text": "1.2",
+        "number": 1.2
+      },
+      "link": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "mail-group-h": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "mail-list-w": {
+        "text": "20rem",
+        "px": 320
+      },
+      "mail-rail-gap": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "mail-rail-row": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "mail-row-bg": {
+        "text": "oklch(0 0 0)",
+        "color": [0, 0, 0, 1]
+      },
+      "mail-row-bg-hover": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 5%, oklch(0 0 0))",
+        "color": [0.00154296, 0.0015436, 0.00154366, 1]
+      },
+      "mail-row-bg-selected": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 13%, oklch(0 0 0))",
+        "color": [0.0243296, 0.0243397, 0.0243407, 1]
+      },
+      "mail-row-compact": {
+        "text": "2rem",
+        "px": 32
+      },
+      "mail-sender-w": {
+        "text": "9rem",
+        "px": 144
+      },
+      "measure-reading": {
+        "text": "70ch",
+        "px": 560
+      },
+      "measure-thread": {
+        "text": "48rem",
+        "px": 768
+      },
+      "menu-fade": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "mono-active": {
+        "text": "oklch(0.88 0 0)",
+        "color": [0.844088, 0.844244, 0.844259, 1]
+      },
+      "mono-base": {
+        "text": "oklch(0.95 0 0)",
+        "color": [0.934359, 0.934529, 0.934546, 1]
+      },
+      "mono-hover": {
+        "text": "oklch(1.00 0 0)",
+        "color": [0.999871, 1.00005, 1.00007, 1]
+      },
+      "motion-base": {
+        "text": "180ms",
+        "ms": 180
+      },
+      "motion-fade": {
+        "text": "100ms",
+        "ms": 100
+      },
+      "motion-fast": {
+        "text": "100ms",
+        "ms": 100
+      },
+      "motion-grow": {
+        "text": "0.96",
+        "number": 0.96
+      },
+      "motion-instant": {
+        "text": "0ms",
+        "ms": 0
+      },
+      "motion-shift": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "motion-slow": {
+        "text": "280ms",
+        "ms": 280
+      },
+      "motion-slower": {
+        "text": "500ms",
+        "ms": 500
+      },
+      "muted": {
+        "text": "oklch(0.18  0 0)",
+        "color": [0.0686772, 0.0686986, 0.0687006, 1]
+      },
+      "muted-foreground": {
+        "text": "oklch(0.72  0 0)",
+        "color": [0.644624, 0.644745, 0.644756, 1]
+      },
+      "neutral-100": {
+        "text": "oklch(0.965 0 0)",
+        "color": [0.953923, 0.954098, 0.954115, 1]
+      },
+      "neutral-200": {
+        "text": "oklch(0.92  0 0)",
+        "color": [0.89546, 0.895625, 0.89564, 1]
+      },
+      "neutral-300": {
+        "text": "oklch(0.85  0 0)",
+        "color": [0.80594, 0.806089, 0.806103, 1]
+      },
+      "neutral-400": {
+        "text": "oklch(0.72  0 0)",
+        "color": [0.644624, 0.644745, 0.644756, 1]
+      },
+      "neutral-50": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "neutral-500": {
+        "text": "oklch(0.58  0 0)",
+        "color": [0.47893, 0.479022, 0.479031, 1]
+      },
+      "neutral-600": {
+        "text": "oklch(0.45  0 0)",
+        "color": [0.33379, 0.333857, 0.333863, 1]
+      },
+      "neutral-700": {
+        "text": "oklch(0.32  0 0)",
+        "color": [0.198885, 0.198929, 0.198933, 1]
+      },
+      "neutral-800": {
+        "text": "oklch(0.22  0 0)",
+        "color": [0.103938, 0.103965, 0.103968, 1]
+      },
+      "neutral-850": {
+        "text": "oklch(0.18  0 0)",
+        "color": [0.0686772, 0.0686986, 0.0687006, 1]
+      },
+      "neutral-900": {
+        "text": "oklch(0.14  0 0)",
+        "color": [0.035442, 0.0354568, 0.0354581, 1]
+      },
+      "neutral-950": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "neutral-975": {
+        "text": "oklch(0.07  0 0)",
+        "color": [0.00443026, 0.00443209, 0.00443227, 1]
+      },
+      "notes-meta-line-space": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "pad-x": {
+        "text": "1rem",
+        "px": 16
+      },
+      "pad-x-sm": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "pad-y": {
+        "text": "0.625rem",
+        "px": 10
+      },
+      "pad-y-sm": {
+        "text": "0.375rem",
+        "px": 6
+      },
+      "panel-gap": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "panel-inset": {
+        "text": "1rem",
+        "px": 16
+      },
+      "panel-pad": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "panel-strip-w": {
+        "text": "2.5rem",
+        "px": 40
+      },
+      "panel-title-top": {
+        "text": "calc(0.5rem + (2.25rem - 1.75rem) / 2)",
+        "px": 12
+      },
+      "pink-active": {
+        "text": "oklch(0.66 0.20 350)",
+        "color": [0.902108, 0.319679, 0.639826, 1]
+      },
+      "pink-base": {
+        "text": "oklch(0.71 0.20 350)",
+        "color": [0.972199, 0.385108, 0.701259, 1]
+      },
+      "pink-hover": {
+        "text": "oklch(0.76 0.20 350)",
+        "color": [1.04283, 0.449719, 0.763676, 1]
+      },
+      "popover": {
+        "text": "oklch(0.18  0 0)",
+        "color": [0.0686772, 0.0686986, 0.0687006, 1]
+      },
+      "popover-foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "presence-reachable": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "primary": {
+        "text": "oklch(0.95 0 0)",
+        "color": [0.934359, 0.934529, 0.934546, 1]
+      },
+      "primary-active": {
+        "text": "oklch(0.88 0 0)",
+        "color": [0.844088, 0.844244, 0.844259, 1]
+      },
+      "primary-foreground": {
+        "text": "oklch(0.10 0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "primary-hover": {
+        "text": "oklch(1.00 0 0)",
+        "color": [0.999871, 1.00005, 1.00007, 1]
+      },
+      "radius": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "radius-full": {
+        "text": "9999px",
+        "px": 9999
+      },
+      "radius-lg": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "radius-md": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "radius-sm": {
+        "text": "0.25rem",
+        "px": 4
+      },
+      "radius-xl": {
+        "text": "1rem",
+        "px": 16
+      },
+      "red-active": {
+        "text": "oklch(0.60 0.22 25)",
+        "color": [0.902936, 0.167951, 0.205093, 1]
+      },
+      "red-base": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "red-hover": {
+        "text": "oklch(0.72 0.22 25)",
+        "color": [1.07723, 0.356321, 0.349826, 1]
+      },
+      "ring": {
+        "text": "oklch(0.95 0 0)",
+        "color": [0.934359, 0.934529, 0.934546, 1]
+      },
+      "row-first-line-pad": {
+        "text": "calc((1.625rem - 1lh) / 2)",
+        "px": 4
+      },
+      "row-h": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "row-h-sm": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "scrim": {
+        "text": "color-mix(in oklab, oklch(0 0 0) 82%, transparent)",
+        "color": [0, 0, 0, 0.82]
+      },
+      "scroll-thumb": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 16%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.16]
+      },
+      "scroll-thumb-hover": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 32%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.32]
+      },
+      "search-match-bg": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 32%, transparent)",
+        "color": [0.934359, 0.934529, 0.934546, 0.32]
+      },
+      "secondary": {
+        "text": "oklch(0.22  0 0)",
+        "color": [0.103938, 0.103965, 0.103968, 1]
+      },
+      "secondary-foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "selected-bg": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 14%, oklch(0.14  0 0))",
+        "color": [0.134652, 0.134685, 0.134688, 1]
+      },
+      "selected-border": {
+        "text": "oklch(0.95 0 0)",
+        "color": [0.934359, 0.934529, 0.934546, 1]
+      },
+      "shadow-control-raised": {
+        "text": "0 0 0 0 transparent",
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px"
+      },
+      "shadow-lg": {
+        "text": "0 12px 32px rgb(0 0 0 / 0.55)",
+        "shadow": "rgba(0, 0, 0, 0.55) 0px 12px 32px 0px"
+      },
+      "shadow-md": {
+        "text": "0 4px 12px rgb(0 0 0 / 0.45)",
+        "shadow": "rgba(0, 0, 0, 0.45) 0px 4px 12px 0px"
+      },
+      "shadow-overlay": {
+        "text": "0 24px 64px rgb(0 0 0 / 0.65)",
+        "shadow": "rgba(0, 0, 0, 0.65) 0px 24px 64px 0px"
+      },
+      "shadow-sm": {
+        "text": "0 1px 2px rgb(0 0 0 / 0.35)",
+        "shadow": "rgba(0, 0, 0, 0.35) 0px 1px 2px 0px"
+      },
+      "shadow-xs": {
+        "text": "0 1px 0 rgb(0 0 0 / 0.30)",
+        "shadow": "rgba(0, 0, 0, 0.3) 0px 1px 0px 0px"
+      },
+      "state-active": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 9%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.09]
+      },
+      "state-active-hover": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 14%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.14]
+      },
+      "state-hover": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 5%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.05]
+      },
+      "state-selected": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 13%, transparent)",
+        "color": [0.934359, 0.934529, 0.934546, 0.13]
+      },
+      "state-selected-edge": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 32%, transparent)",
+        "color": [0.934359, 0.934529, 0.934546, 0.32]
+      },
+      "state-selected-hover": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 18%, transparent)",
+        "color": [0.934359, 0.934529, 0.934546, 0.18]
+      },
+      "state-selected-ring": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 32%, transparent)",
+        "color": [0.934359, 0.934529, 0.934546, 0.32]
+      },
+      "status-danger": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "status-info": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "status-success": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "status-warning": {
+        "text": "oklch(0.82 0.15 75)",
+        "color": [0.988912, 0.707733, 0.257336, 1]
+      },
+      "stream-fade-bottom": {
+        "text": "1.25rem",
+        "px": 20
+      },
+      "stream-fade-top": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "subtle-foreground": {
+        "text": "color-mix(in oklab, oklch(0.72  0 0) 86%, transparent)",
+        "color": [0.644624, 0.644745, 0.644756, 0.86]
+      },
+      "success": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "success-foreground": {
+        "text": "oklch(0.12 0 0)",
+        "color": [0.0223192, 0.0223284, 0.0223293, 1]
+      },
+      "tag-chip-surface": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 7%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.07]
+      },
+      "teal-active": {
+        "text": "oklch(0.66 0.13 200)",
+        "color": [-0.22677, 0.662694, 0.695718, 1]
+      },
+      "teal-base": {
+        "text": "oklch(0.72 0.13 200)",
+        "color": [-0.158331, 0.738114, 0.770725, 1]
+      },
+      "teal-hover": {
+        "text": "oklch(0.77 0.13 200)",
+        "color": [0.0365027, 0.801938, 0.834257, 1]
+      },
+      "text-2xl": {
+        "text": "1.5rem",
+        "px": 24
+      },
+      "text-2xs": {
+        "text": "0.6875rem",
+        "px": 11
+      },
+      "text-3xl": {
+        "text": "1.875rem",
+        "px": 30
+      },
+      "text-3xs": {
+        "text": "0.5625rem",
+        "px": 9
+      },
+      "text-4xl": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "text-5xl": {
+        "text": "3rem",
+        "px": 48
+      },
+      "text-base": {
+        "text": "0.875rem",
+        "px": 14
+      },
+      "text-lg": {
+        "text": "1.125rem",
+        "px": 18
+      },
+      "text-md": {
+        "text": "0.9375rem",
+        "px": 15
+      },
+      "text-selection": {
+        "text": "color-mix(in oklch, oklch(0.70 0.14 230) 38%, transparent)",
+        "color": [-0.0153564, 0.678468, 0.89443, 0.38]
+      },
+      "text-sm": {
+        "text": "0.8125rem",
+        "px": 13
+      },
+      "text-xl": {
+        "text": "1.25rem",
+        "px": 20
+      },
+      "text-xs": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "timeline-band": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 3.2%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.032]
+      },
+      "timeline-bar": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 9%, oklch(0.14  0 0))",
+        "color": [0.100379, 0.100406, 0.100408, 1]
+      },
+      "timeline-grid": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 5.5%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.055]
+      },
+      "timeline-grid-strong": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 13%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.13]
+      },
+      "timeline-late": {
+        "text": "color-mix(in oklab, oklch(0.72  0 0) 46%, oklch(0.14  0 0))",
+        "color": [0.287709, 0.287768, 0.287774, 1]
+      },
+      "timeline-outline": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 24%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.24]
+      },
+      "timeline-progress": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 52%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.52]
+      },
+      "timeline-segment": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 16%, oklch(0.14  0 0))",
+        "color": [0.155261, 0.155298, 0.155301, 1]
+      },
+      "timeline-weekend": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 2.4%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.024]
+      },
+      "tracking-normal": {
+        "text": "0",
+        "px": 0,
+        "number": 0
+      },
+      "tracking-tight": {
+        "text": "-0.015em",
+        "px": -0.24
+      },
+      "tracking-wide": {
+        "text": "0.04em",
+        "px": 0.64
+      },
+      "tree-indent": {
+        "text": "0.875rem",
+        "px": 14
+      },
+      "violet-active": {
+        "text": "oklch(0.60 0.20 295)",
+        "color": [0.549227, 0.368974, 0.911061, 1]
+      },
+      "violet-base": {
+        "text": "oklch(0.66 0.20 295)",
+        "color": [0.618675, 0.444413, 0.992972, 1]
+      },
+      "violet-hover": {
+        "text": "oklch(0.72 0.20 295)",
+        "color": [0.689938, 0.520015, 1.07583, 1]
+      },
+      "warning": {
+        "text": "oklch(0.82 0.15 75)",
+        "color": [0.988912, 0.707733, 0.257336, 1]
+      },
+      "warning-foreground": {
+        "text": "oklch(0.12 0 0)",
+        "color": [0.0223192, 0.0223284, 0.0223293, 1]
+      },
+      "width-content-max": {
+        "text": "65rem",
+        "px": 1040
+      },
+      "width-prose-max": {
+        "text": "36rem",
+        "px": 576
+      },
+      "width-rail": {
+        "text": "20rem",
+        "px": 320
+      },
+      "width-sidebar": {
+        "text": "16rem",
+        "px": 256
+      },
+      "z-base": {
+        "text": "0",
+        "px": 0,
+        "number": 0
+      },
+      "z-debug": {
+        "text": "100",
+        "number": 100
+      },
+      "z-dialog": {
+        "text": "60",
+        "number": 60
+      },
+      "z-dropdown": {
+        "text": "70",
+        "number": 70
+      },
+      "z-header": {
+        "text": "30",
+        "number": 30
+      },
+      "z-overlay": {
+        "text": "50",
+        "number": 50
+      },
+      "z-popover": {
+        "text": "70",
+        "number": 70
+      },
+      "z-rail": {
+        "text": "20",
+        "number": 20
+      },
+      "z-sticky": {
+        "text": "10",
+        "number": 10
+      },
+      "z-toast": {
+        "text": "90",
+        "number": 90
+      },
+      "z-tooltip": {
+        "text": "80",
+        "number": 80
+      }
+    },
+    "light": {
+      "accent": {
+        "text": "oklch(0.965 0 0)",
+        "color": [0.953923, 0.954098, 0.954115, 1]
+      },
+      "accent-foreground": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "amber-active": {
+        "text": "oklch(0.74 0.16 75)",
+        "color": [0.895885, 0.601328, -0.0782217, 1]
+      },
+      "amber-base": {
+        "text": "oklch(0.80 0.16 75)",
+        "color": [0.975754, 0.676548, 0.147226, 1]
+      },
+      "amber-hover": {
+        "text": "oklch(0.85 0.16 75)",
+        "color": [1.04312, 0.740142, 0.243151, 1]
+      },
+      "avatar-feed": {
+        "text": "2rem",
+        "px": 32
+      },
+      "avatar-radius": {
+        "text": "9999px",
+        "px": 9999
+      },
+      "background": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "bar-h": {
+        "text": "3rem",
+        "px": 48
+      },
+      "blue-active": {
+        "text": "oklch(0.60 0.18 245)",
+        "color": [-0.200414, 0.524093, 0.889089, 1]
+      },
+      "blue-base": {
+        "text": "oklch(0.66 0.18 245)",
+        "color": [-0.150534, 0.599266, 0.970115, 1]
+      },
+      "blue-hover": {
+        "text": "oklch(0.72 0.18 245)",
+        "color": [0.026356, 0.675467, 1.05213, 1]
+      },
+      "board-card-w": {
+        "text": "18.5rem",
+        "px": 296
+      },
+      "board-col-w": {
+        "text": "calc(18.5rem + 0.5rem)",
+        "px": 304
+      },
+      "border": {
+        "text": "oklch(0.92  0 0)",
+        "color": [0.89546, 0.895625, 0.89564, 1]
+      },
+      "bp-2xl": {
+        "text": "1536px",
+        "px": 1536
+      },
+      "bp-lg": {
+        "text": "1024px",
+        "px": 1024
+      },
+      "bp-md": {
+        "text": "768px",
+        "px": 768
+      },
+      "bp-sm": {
+        "text": "640px",
+        "px": 640
+      },
+      "bp-xl": {
+        "text": "1280px",
+        "px": 1280
+      },
+      "cal-hour-h": {
+        "text": "3.5rem",
+        "px": 56
+      },
+      "cal-prep-chip-max": {
+        "text": "13.75rem",
+        "px": 220
+      },
+      "cal-zone-gutter-w": {
+        "text": "6.5rem",
+        "px": 104
+      },
+      "card": {
+        "text": "oklch(1 0 0)",
+        "color": [0.999871, 1.00005, 1.00007, 1]
+      },
+      "card-foreground": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "code-comment": {
+        "text": "oklch(0.45  0 0)",
+        "color": [0.33379, 0.333857, 0.333863, 1]
+      },
+      "code-keyword": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "code-number": {
+        "text": "oklch(0.82 0.15 75)",
+        "color": [0.988912, 0.707733, 0.257336, 1]
+      },
+      "code-string": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "comment-mark-bg": {
+        "text": "color-mix(in oklch, oklch(0.82 0.15 75) 14%, transparent)",
+        "color": [0.988912, 0.707733, 0.257336, 0.14]
+      },
+      "comment-mark-bg-focused": {
+        "text": "color-mix(in oklch, oklch(0.82 0.15 75) 32%, transparent)",
+        "color": [0.988912, 0.707733, 0.257336, 0.32]
+      },
+      "comment-mark-line": {
+        "text": "color-mix(in oklch, oklch(0.82 0.15 75) 75%, transparent)",
+        "color": [0.988911, 0.707733, 0.257336, 0.75]
+      },
+      "control-raised": {
+        "text": "oklch(1 0 0)",
+        "color": [0.999871, 1.00005, 1.00007, 1]
+      },
+      "ctrl-h": {
+        "text": "2rem",
+        "px": 32
+      },
+      "ctrl-h-lg": {
+        "text": "2.5rem",
+        "px": 40
+      },
+      "ctrl-h-sm": {
+        "text": "1.625rem",
+        "px": 26
+      },
+      "ctrl-h-xs": {
+        "text": "1.5rem",
+        "px": 24
+      },
+      "danger": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "danger-foreground": {
+        "text": "oklch(0.97 0 0)",
+        "color": [0.960462, 0.960638, 0.960654, 1]
+      },
+      "destructive": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "destructive-foreground": {
+        "text": "oklch(0.97 0 0)",
+        "color": [0.960462, 0.960638, 0.960654, 1]
+      },
+      "ease-in": {
+        "text": "cubic-bezier(0.7, 0, 0.84, 0)"
+      },
+      "ease-in-out": {
+        "text": "cubic-bezier(0.65, 0, 0.35, 1)"
+      },
+      "ease-out": {
+        "text": "cubic-bezier(0.16, 1, 0.3, 1)"
+      },
+      "ease-spring": {
+        "text": "cubic-bezier(0.34, 1.56, 0.64, 1)"
+      },
+      "failed-list-max": {
+        "text": "calc(2rem * 5)",
+        "px": 160
+      },
+      "feed-media-max-h": {
+        "text": "15rem",
+        "px": 240
+      },
+      "feed-media-max-w": {
+        "text": "22.5rem",
+        "px": 360
+      },
+      "feed-person-gap": {
+        "text": "1.125rem",
+        "px": 18
+      },
+      "font-body": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-body-geist": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-body-inter": {
+        "text": "\"Inter\", \"Geist\", system-ui, -apple-system, sans-serif"
+      },
+      "font-body-mono": {
+        "text": "\"Geist Mono\", \"JetBrains Mono\", ui-monospace, SFMono-Regular, Menlo, monospace"
+      },
+      "font-body-serif": {
+        "text": "\"Source Serif Pro\", Georgia, serif"
+      },
+      "font-display": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-display-cal": {
+        "text": "\"Cal Sans\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-display-fraunces": {
+        "text": "\"Fraunces\", \"Source Serif Pro\", Georgia, serif"
+      },
+      "font-display-geist": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-display-pilat": {
+        "text": "\"Pilat Extended\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-mono": {
+        "text": "\"Geist Mono\", \"JetBrains Mono\", ui-monospace, SFMono-Regular, Menlo, monospace"
+      },
+      "font-ui": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-weight-bold": {
+        "text": "700",
+        "number": 700
+      },
+      "font-weight-medium": {
+        "text": "500",
+        "number": 500
+      },
+      "font-weight-regular": {
+        "text": "400",
+        "number": 400
+      },
+      "font-weight-semibold": {
+        "text": "600",
+        "number": 600
+      },
+      "foreground": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "green-active": {
+        "text": "oklch(0.66 0.17 150)",
+        "color": [0.14027, 0.68145, 0.336667, 1]
+      },
+      "green-base": {
+        "text": "oklch(0.72 0.17 150)",
+        "color": [0.248581, 0.75748, 0.40813, 1]
+      },
+      "green-hover": {
+        "text": "oklch(0.78 0.17 150)",
+        "color": [0.33889, 0.834747, 0.480451, 1]
+      },
+      "hairline": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 10%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.1]
+      },
+      "hit-min": {
+        "text": "1.5rem",
+        "px": 24
+      },
+      "hue-spectrum": {
+        "text": "linear-gradient(to right, hsl(0 90% 60%), hsl(60 90% 60%), hsl(120 90% 60%), hsl(180 90% 60%), hsl(240 90% 60%), hsl(300 90% 60%), hsl(359 90% 60%))"
+      },
+      "icon": {
+        "text": "1rem",
+        "px": 16
+      },
+      "icon-lg": {
+        "text": "1.25rem",
+        "px": 20
+      },
+      "icon-sm": {
+        "text": "0.875rem",
+        "px": 14
+      },
+      "icon-xs": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "info": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "info-foreground": {
+        "text": "oklch(0.97 0 0)",
+        "color": [0.960462, 0.960638, 0.960654, 1]
+      },
+      "input": {
+        "text": "oklch(0.965 0 0)",
+        "color": [0.953923, 0.954098, 0.954115, 1]
+      },
+      "label": {
+        "text": "oklch(0.72  0 0)",
+        "color": [0.644624, 0.644745, 0.644756, 1]
+      },
+      "label-fill": {
+        "text": "color-mix(in oklab, oklch(0.72  0 0) 48%, oklch(1 0 0))",
+        "color": [0.825736, 0.825888, 0.825903, 1]
+      },
+      "label-surface": {
+        "text": "oklch(0.70 0 0 / 0.16)",
+        "color": [0.620417, 0.620533, 0.620544, 0.16]
+      },
+      "leading-normal": {
+        "text": "1.5",
+        "number": 1.5
+      },
+      "leading-relaxed": {
+        "text": "1.65",
+        "number": 1.65
+      },
+      "leading-snug": {
+        "text": "1.35",
+        "number": 1.35
+      },
+      "leading-tight": {
+        "text": "1.2",
+        "number": 1.2
+      },
+      "link": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "mail-group-h": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "mail-list-w": {
+        "text": "20rem",
+        "px": 320
+      },
+      "mail-rail-gap": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "mail-rail-row": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "mail-row-bg": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "mail-row-bg-hover": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 5%, oklch(0.985 0 0))",
+        "color": [0.922332, 0.922501, 0.922516, 1]
+      },
+      "mail-row-bg-selected": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 13%, oklch(0.985 0 0))",
+        "color": [0.831272, 0.831425, 0.83144, 1]
+      },
+      "mail-row-compact": {
+        "text": "2rem",
+        "px": 32
+      },
+      "mail-sender-w": {
+        "text": "9rem",
+        "px": 144
+      },
+      "measure-reading": {
+        "text": "70ch",
+        "px": 560
+      },
+      "measure-thread": {
+        "text": "48rem",
+        "px": 768
+      },
+      "menu-fade": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "mono-active": {
+        "text": "oklch(0.88 0 0)",
+        "color": [0.844088, 0.844244, 0.844259, 1]
+      },
+      "mono-base": {
+        "text": "oklch(0.95 0 0)",
+        "color": [0.934359, 0.934529, 0.934546, 1]
+      },
+      "mono-hover": {
+        "text": "oklch(1.00 0 0)",
+        "color": [0.999871, 1.00005, 1.00007, 1]
+      },
+      "motion-base": {
+        "text": "180ms",
+        "ms": 180
+      },
+      "motion-fade": {
+        "text": "100ms",
+        "ms": 100
+      },
+      "motion-fast": {
+        "text": "100ms",
+        "ms": 100
+      },
+      "motion-grow": {
+        "text": "0.96",
+        "number": 0.96
+      },
+      "motion-instant": {
+        "text": "0ms",
+        "ms": 0
+      },
+      "motion-shift": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "motion-slow": {
+        "text": "280ms",
+        "ms": 280
+      },
+      "motion-slower": {
+        "text": "500ms",
+        "ms": 500
+      },
+      "muted": {
+        "text": "oklch(0.965 0 0)",
+        "color": [0.953923, 0.954098, 0.954115, 1]
+      },
+      "muted-foreground": {
+        "text": "oklch(0.45  0 0)",
+        "color": [0.33379, 0.333857, 0.333863, 1]
+      },
+      "neutral-100": {
+        "text": "oklch(0.965 0 0)",
+        "color": [0.953923, 0.954098, 0.954115, 1]
+      },
+      "neutral-200": {
+        "text": "oklch(0.92  0 0)",
+        "color": [0.89546, 0.895625, 0.89564, 1]
+      },
+      "neutral-300": {
+        "text": "oklch(0.85  0 0)",
+        "color": [0.80594, 0.806089, 0.806103, 1]
+      },
+      "neutral-400": {
+        "text": "oklch(0.72  0 0)",
+        "color": [0.644624, 0.644745, 0.644756, 1]
+      },
+      "neutral-50": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "neutral-500": {
+        "text": "oklch(0.58  0 0)",
+        "color": [0.47893, 0.479022, 0.479031, 1]
+      },
+      "neutral-600": {
+        "text": "oklch(0.45  0 0)",
+        "color": [0.33379, 0.333857, 0.333863, 1]
+      },
+      "neutral-700": {
+        "text": "oklch(0.32  0 0)",
+        "color": [0.198885, 0.198929, 0.198933, 1]
+      },
+      "neutral-800": {
+        "text": "oklch(0.22  0 0)",
+        "color": [0.103938, 0.103965, 0.103968, 1]
+      },
+      "neutral-850": {
+        "text": "oklch(0.18  0 0)",
+        "color": [0.0686772, 0.0686986, 0.0687006, 1]
+      },
+      "neutral-900": {
+        "text": "oklch(0.14  0 0)",
+        "color": [0.035442, 0.0354568, 0.0354581, 1]
+      },
+      "neutral-950": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "neutral-975": {
+        "text": "oklch(0.07  0 0)",
+        "color": [0.00443026, 0.00443209, 0.00443227, 1]
+      },
+      "notes-meta-line-space": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "pad-x": {
+        "text": "1rem",
+        "px": 16
+      },
+      "pad-x-sm": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "pad-y": {
+        "text": "0.625rem",
+        "px": 10
+      },
+      "pad-y-sm": {
+        "text": "0.375rem",
+        "px": 6
+      },
+      "panel-gap": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "panel-inset": {
+        "text": "1rem",
+        "px": 16
+      },
+      "panel-pad": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "panel-strip-w": {
+        "text": "2.5rem",
+        "px": 40
+      },
+      "panel-title-top": {
+        "text": "calc(0.5rem + (2.25rem - 1.75rem) / 2)",
+        "px": 12
+      },
+      "pink-active": {
+        "text": "oklch(0.66 0.20 350)",
+        "color": [0.902108, 0.319679, 0.639826, 1]
+      },
+      "pink-base": {
+        "text": "oklch(0.71 0.20 350)",
+        "color": [0.972199, 0.385108, 0.701259, 1]
+      },
+      "pink-hover": {
+        "text": "oklch(0.76 0.20 350)",
+        "color": [1.04283, 0.449719, 0.763676, 1]
+      },
+      "popover": {
+        "text": "oklch(1 0 0)",
+        "color": [0.999871, 1.00005, 1.00007, 1]
+      },
+      "popover-foreground": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "presence-reachable": {
+        "text": "oklch(0.6 0.15 145)",
+        "color": [0.225845, 0.590611, 0.259696, 1]
+      },
+      "primary": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "primary-active": {
+        "text": "oklch(0.22  0 0)",
+        "color": [0.103938, 0.103965, 0.103968, 1]
+      },
+      "primary-foreground": {
+        "text": "oklch(0.97 0 0)",
+        "color": [0.960462, 0.960638, 0.960654, 1]
+      },
+      "primary-hover": {
+        "text": "oklch(0.14  0 0)",
+        "color": [0.035442, 0.0354568, 0.0354581, 1]
+      },
+      "radius": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "radius-full": {
+        "text": "9999px",
+        "px": 9999
+      },
+      "radius-lg": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "radius-md": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "radius-sm": {
+        "text": "0.25rem",
+        "px": 4
+      },
+      "radius-xl": {
+        "text": "1rem",
+        "px": 16
+      },
+      "red-active": {
+        "text": "oklch(0.60 0.22 25)",
+        "color": [0.902936, 0.167951, 0.205093, 1]
+      },
+      "red-base": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "red-hover": {
+        "text": "oklch(0.72 0.22 25)",
+        "color": [1.07723, 0.356321, 0.349826, 1]
+      },
+      "ring": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "row-first-line-pad": {
+        "text": "calc((1.625rem - 1lh) / 2)",
+        "px": 4
+      },
+      "row-h": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "row-h-sm": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "scrim": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 82%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.82]
+      },
+      "scroll-thumb": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 16%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.16]
+      },
+      "scroll-thumb-hover": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 32%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.32]
+      },
+      "search-match-bg": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 32%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.32]
+      },
+      "secondary": {
+        "text": "oklch(0.965 0 0)",
+        "color": [0.953923, 0.954098, 0.954115, 1]
+      },
+      "secondary-foreground": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "selected-bg": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 14%, oklch(1 0 0))",
+        "color": [0.836432, 0.836587, 0.836601, 1]
+      },
+      "selected-border": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "shadow-control-raised": {
+        "text": "0 1px 2px rgb(0 0 0 / 0.08)",
+        "shadow": "rgba(0, 0, 0, 0.08) 0px 1px 2px 0px"
+      },
+      "shadow-lg": {
+        "text": "0 12px 32px rgb(0 0 0 / 0.14)",
+        "shadow": "rgba(0, 0, 0, 0.14) 0px 12px 32px 0px"
+      },
+      "shadow-md": {
+        "text": "0 4px 12px rgb(0 0 0 / 0.10)",
+        "shadow": "rgba(0, 0, 0, 0.1) 0px 4px 12px 0px"
+      },
+      "shadow-overlay": {
+        "text": "0 24px 64px rgb(0 0 0 / 0.20)",
+        "shadow": "rgba(0, 0, 0, 0.2) 0px 24px 64px 0px"
+      },
+      "shadow-sm": {
+        "text": "0 1px 2px rgb(0 0 0 / 0.08)",
+        "shadow": "rgba(0, 0, 0, 0.08) 0px 1px 2px 0px"
+      },
+      "shadow-xs": {
+        "text": "0 1px 0 rgb(0 0 0 / 0.05)",
+        "shadow": "rgba(0, 0, 0, 0.05) 0px 1px 0px 0px"
+      },
+      "state-active": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 9%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.09]
+      },
+      "state-active-hover": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 14%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.14]
+      },
+      "state-hover": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 5%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.05]
+      },
+      "state-selected": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 13%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.13]
+      },
+      "state-selected-edge": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 32%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.32]
+      },
+      "state-selected-hover": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 18%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.18]
+      },
+      "state-selected-ring": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 32%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.32]
+      },
+      "status-danger": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "status-info": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "status-success": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "status-warning": {
+        "text": "oklch(0.82 0.15 75)",
+        "color": [0.988912, 0.707733, 0.257336, 1]
+      },
+      "stream-fade-bottom": {
+        "text": "1.25rem",
+        "px": 20
+      },
+      "stream-fade-top": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "subtle-foreground": {
+        "text": "color-mix(in oklab, oklch(0.45  0 0) 86%, transparent)",
+        "color": [0.33379, 0.333857, 0.333863, 0.86]
+      },
+      "success": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "success-foreground": {
+        "text": "oklch(0.97 0 0)",
+        "color": [0.960462, 0.960638, 0.960654, 1]
+      },
+      "tag-chip-surface": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 6%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.06]
+      },
+      "teal-active": {
+        "text": "oklch(0.66 0.13 200)",
+        "color": [-0.22677, 0.662694, 0.695718, 1]
+      },
+      "teal-base": {
+        "text": "oklch(0.72 0.13 200)",
+        "color": [-0.158331, 0.738114, 0.770725, 1]
+      },
+      "teal-hover": {
+        "text": "oklch(0.77 0.13 200)",
+        "color": [0.0365027, 0.801938, 0.834257, 1]
+      },
+      "text-2xl": {
+        "text": "1.5rem",
+        "px": 24
+      },
+      "text-2xs": {
+        "text": "0.6875rem",
+        "px": 11
+      },
+      "text-3xl": {
+        "text": "1.875rem",
+        "px": 30
+      },
+      "text-3xs": {
+        "text": "0.5625rem",
+        "px": 9
+      },
+      "text-4xl": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "text-5xl": {
+        "text": "3rem",
+        "px": 48
+      },
+      "text-base": {
+        "text": "0.875rem",
+        "px": 14
+      },
+      "text-lg": {
+        "text": "1.125rem",
+        "px": 18
+      },
+      "text-md": {
+        "text": "0.9375rem",
+        "px": 15
+      },
+      "text-selection": {
+        "text": "color-mix(in oklch, oklch(0.70 0.14 230) 38%, transparent)",
+        "color": [-0.0153564, 0.678468, 0.89443, 0.38]
+      },
+      "text-sm": {
+        "text": "0.8125rem",
+        "px": 13
+      },
+      "text-xl": {
+        "text": "1.25rem",
+        "px": 20
+      },
+      "text-xs": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "timeline-band": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 3.2%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.032]
+      },
+      "timeline-bar": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 9%, oklch(1 0 0))",
+        "color": [0.894169, 0.894333, 0.894349, 1]
+      },
+      "timeline-grid": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 5.5%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.055]
+      },
+      "timeline-grid-strong": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 13%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.13]
+      },
+      "timeline-late": {
+        "text": "color-mix(in oklab, oklch(0.45  0 0) 46%, oklch(1 0 0))",
+        "color": [0.677571, 0.677698, 0.67771, 1]
+      },
+      "timeline-outline": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 24%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.24]
+      },
+      "timeline-progress": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 52%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.52]
+      },
+      "timeline-segment": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 16%, oklch(1 0 0))",
+        "color": [0.813543, 0.813693, 0.813707, 1]
+      },
+      "timeline-weekend": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 2.4%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.024]
+      },
+      "tracking-normal": {
+        "text": "0",
+        "px": 0,
+        "number": 0
+      },
+      "tracking-tight": {
+        "text": "-0.015em",
+        "px": -0.24
+      },
+      "tracking-wide": {
+        "text": "0.04em",
+        "px": 0.64
+      },
+      "tree-indent": {
+        "text": "0.875rem",
+        "px": 14
+      },
+      "violet-active": {
+        "text": "oklch(0.60 0.20 295)",
+        "color": [0.549227, 0.368974, 0.911061, 1]
+      },
+      "violet-base": {
+        "text": "oklch(0.66 0.20 295)",
+        "color": [0.618675, 0.444413, 0.992972, 1]
+      },
+      "violet-hover": {
+        "text": "oklch(0.72 0.20 295)",
+        "color": [0.689938, 0.520015, 1.07583, 1]
+      },
+      "warning": {
+        "text": "oklch(0.82 0.15 75)",
+        "color": [0.988912, 0.707733, 0.257336, 1]
+      },
+      "warning-foreground": {
+        "text": "oklch(0.15 0 0)",
+        "color": [0.0434721, 0.0434891, 0.0434907, 1]
+      },
+      "width-content-max": {
+        "text": "65rem",
+        "px": 1040
+      },
+      "width-prose-max": {
+        "text": "36rem",
+        "px": 576
+      },
+      "width-rail": {
+        "text": "20rem",
+        "px": 320
+      },
+      "width-sidebar": {
+        "text": "16rem",
+        "px": 256
+      },
+      "z-base": {
+        "text": "0",
+        "px": 0,
+        "number": 0
+      },
+      "z-debug": {
+        "text": "100",
+        "number": 100
+      },
+      "z-dialog": {
+        "text": "60",
+        "number": 60
+      },
+      "z-dropdown": {
+        "text": "70",
+        "number": 70
+      },
+      "z-header": {
+        "text": "30",
+        "number": 30
+      },
+      "z-overlay": {
+        "text": "50",
+        "number": 50
+      },
+      "z-popover": {
+        "text": "70",
+        "number": 70
+      },
+      "z-rail": {
+        "text": "20",
+        "number": 20
+      },
+      "z-sticky": {
+        "text": "10",
+        "number": 10
+      },
+      "z-toast": {
+        "text": "90",
+        "number": 90
+      },
+      "z-tooltip": {
+        "text": "80",
+        "number": 80
+      }
+    },
+    "dark-warm-violet": {
+      "accent": {
+        "text": "oklch(0.27  0.032 60)",
+        "color": [0.196447, 0.136133, 0.087023, 1]
+      },
+      "accent-foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "amber-active": {
+        "text": "oklch(0.74 0.16 75)",
+        "color": [0.895885, 0.601328, -0.0782217, 1]
+      },
+      "amber-base": {
+        "text": "oklch(0.80 0.16 75)",
+        "color": [0.975754, 0.676548, 0.147226, 1]
+      },
+      "amber-hover": {
+        "text": "oklch(0.85 0.16 75)",
+        "color": [1.04312, 0.740142, 0.243151, 1]
+      },
+      "avatar-feed": {
+        "text": "2rem",
+        "px": 32
+      },
+      "avatar-radius": {
+        "text": "9999px",
+        "px": 9999
+      },
+      "background": {
+        "text": "oklch(0.13  0.020 60)",
+        "color": [0.0508637, 0.0222949, 0.0077011, 1]
+      },
+      "bar-h": {
+        "text": "3rem",
+        "px": 48
+      },
+      "blue-active": {
+        "text": "oklch(0.60 0.18 245)",
+        "color": [-0.200414, 0.524093, 0.889089, 1]
+      },
+      "blue-base": {
+        "text": "oklch(0.66 0.18 245)",
+        "color": [-0.150534, 0.599266, 0.970115, 1]
+      },
+      "blue-hover": {
+        "text": "oklch(0.72 0.18 245)",
+        "color": [0.026356, 0.675467, 1.05213, 1]
+      },
+      "board-card-w": {
+        "text": "18.5rem",
+        "px": 296
+      },
+      "board-col-w": {
+        "text": "calc(18.5rem + 0.5rem)",
+        "px": 304
+      },
+      "border": {
+        "text": "oklch(0.27  0.032 60)",
+        "color": [0.196447, 0.136133, 0.087023, 1]
+      },
+      "bp-2xl": {
+        "text": "1536px",
+        "px": 1536
+      },
+      "bp-lg": {
+        "text": "1024px",
+        "px": 1024
+      },
+      "bp-md": {
+        "text": "768px",
+        "px": 768
+      },
+      "bp-sm": {
+        "text": "640px",
+        "px": 640
+      },
+      "bp-xl": {
+        "text": "1280px",
+        "px": 1280
+      },
+      "cal-hour-h": {
+        "text": "3.5rem",
+        "px": 56
+      },
+      "cal-prep-chip-max": {
+        "text": "13.75rem",
+        "px": 220
+      },
+      "cal-zone-gutter-w": {
+        "text": "6.5rem",
+        "px": 104
+      },
+      "card": {
+        "text": "oklch(0.185 0.026 60)",
+        "color": [0.106641, 0.0620753, 0.0264154, 1]
+      },
+      "card-foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "code-comment": {
+        "text": "oklch(0.72  0.035 60)",
+        "color": [0.712319, 0.627299, 0.561275, 1]
+      },
+      "code-keyword": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "code-number": {
+        "text": "oklch(0.82 0.15 75)",
+        "color": [0.988912, 0.707733, 0.257336, 1]
+      },
+      "code-string": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "comment-mark-bg": {
+        "text": "color-mix(in oklch, oklch(0.82 0.15 75) 14%, transparent)",
+        "color": [0.988912, 0.707733, 0.257336, 0.14]
+      },
+      "comment-mark-bg-focused": {
+        "text": "color-mix(in oklch, oklch(0.82 0.15 75) 32%, transparent)",
+        "color": [0.988912, 0.707733, 0.257336, 0.32]
+      },
+      "comment-mark-line": {
+        "text": "color-mix(in oklch, oklch(0.82 0.15 75) 75%, transparent)",
+        "color": [0.988911, 0.707733, 0.257336, 0.75]
+      },
+      "control-raised": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 14%, oklch(0.225 0.029 60))",
+        "color": [0.249197, 0.199521, 0.160369, 1]
+      },
+      "ctrl-h": {
+        "text": "2rem",
+        "px": 32
+      },
+      "ctrl-h-lg": {
+        "text": "2.5rem",
+        "px": 40
+      },
+      "ctrl-h-sm": {
+        "text": "1.625rem",
+        "px": 26
+      },
+      "ctrl-h-xs": {
+        "text": "1.5rem",
+        "px": 24
+      },
+      "danger": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "danger-foreground": {
+        "text": "oklch(0.97 0 0)",
+        "color": [0.960462, 0.960638, 0.960654, 1]
+      },
+      "destructive": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "destructive-foreground": {
+        "text": "oklch(0.15 0 0)",
+        "color": [0.0434721, 0.0434891, 0.0434907, 1]
+      },
+      "ease-in": {
+        "text": "cubic-bezier(0.7, 0, 0.84, 0)"
+      },
+      "ease-in-out": {
+        "text": "cubic-bezier(0.65, 0, 0.35, 1)"
+      },
+      "ease-out": {
+        "text": "cubic-bezier(0.16, 1, 0.3, 1)"
+      },
+      "ease-spring": {
+        "text": "cubic-bezier(0.34, 1.56, 0.64, 1)"
+      },
+      "failed-list-max": {
+        "text": "calc(2rem * 5)",
+        "px": 160
+      },
+      "feed-media-max-h": {
+        "text": "15rem",
+        "px": 240
+      },
+      "feed-media-max-w": {
+        "text": "22.5rem",
+        "px": 360
+      },
+      "feed-person-gap": {
+        "text": "1.125rem",
+        "px": 18
+      },
+      "font-body": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-body-geist": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-body-inter": {
+        "text": "\"Inter\", \"Geist\", system-ui, -apple-system, sans-serif"
+      },
+      "font-body-mono": {
+        "text": "\"Geist Mono\", \"JetBrains Mono\", ui-monospace, SFMono-Regular, Menlo, monospace"
+      },
+      "font-body-serif": {
+        "text": "\"Source Serif Pro\", Georgia, serif"
+      },
+      "font-display": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-display-cal": {
+        "text": "\"Cal Sans\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-display-fraunces": {
+        "text": "\"Fraunces\", \"Source Serif Pro\", Georgia, serif"
+      },
+      "font-display-geist": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-display-pilat": {
+        "text": "\"Pilat Extended\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-mono": {
+        "text": "\"Geist Mono\", \"JetBrains Mono\", ui-monospace, SFMono-Regular, Menlo, monospace"
+      },
+      "font-ui": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-weight-bold": {
+        "text": "700",
+        "number": 700
+      },
+      "font-weight-medium": {
+        "text": "500",
+        "number": 500
+      },
+      "font-weight-regular": {
+        "text": "400",
+        "number": 400
+      },
+      "font-weight-semibold": {
+        "text": "600",
+        "number": 600
+      },
+      "foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "green-active": {
+        "text": "oklch(0.66 0.17 150)",
+        "color": [0.14027, 0.68145, 0.336667, 1]
+      },
+      "green-base": {
+        "text": "oklch(0.72 0.17 150)",
+        "color": [0.248581, 0.75748, 0.40813, 1]
+      },
+      "green-hover": {
+        "text": "oklch(0.78 0.17 150)",
+        "color": [0.33889, 0.834747, 0.480451, 1]
+      },
+      "hairline": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 10%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.1]
+      },
+      "hit-min": {
+        "text": "1.5rem",
+        "px": 24
+      },
+      "hue-spectrum": {
+        "text": "linear-gradient(to right, hsl(0 90% 60%), hsl(60 90% 60%), hsl(120 90% 60%), hsl(180 90% 60%), hsl(240 90% 60%), hsl(300 90% 60%), hsl(359 90% 60%))"
+      },
+      "icon": {
+        "text": "1rem",
+        "px": 16
+      },
+      "icon-lg": {
+        "text": "1.25rem",
+        "px": 20
+      },
+      "icon-sm": {
+        "text": "0.875rem",
+        "px": 14
+      },
+      "icon-xs": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "info": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "info-foreground": {
+        "text": "oklch(0.12 0 0)",
+        "color": [0.0223192, 0.0223284, 0.0223293, 1]
+      },
+      "input": {
+        "text": "oklch(0.225 0.029 60)",
+        "color": [0.148162, 0.0959559, 0.0530073, 1]
+      },
+      "label": {
+        "text": "oklch(0.72  0 0)",
+        "color": [0.644624, 0.644745, 0.644756, 1]
+      },
+      "label-fill": {
+        "text": "color-mix(in oklab, oklch(0.72  0 0) 48%, oklch(0.185 0.026 60))",
+        "color": [0.348433, 0.319257, 0.296792, 1]
+      },
+      "label-surface": {
+        "text": "oklch(0.70 0 0 / 0.16)",
+        "color": [0.620417, 0.620533, 0.620544, 0.16]
+      },
+      "leading-normal": {
+        "text": "1.5",
+        "number": 1.5
+      },
+      "leading-relaxed": {
+        "text": "1.65",
+        "number": 1.65
+      },
+      "leading-snug": {
+        "text": "1.35",
+        "number": 1.35
+      },
+      "leading-tight": {
+        "text": "1.2",
+        "number": 1.2
+      },
+      "link": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "mail-group-h": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "mail-list-w": {
+        "text": "20rem",
+        "px": 320
+      },
+      "mail-rail-gap": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "mail-rail-row": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "mail-row-bg": {
+        "text": "oklch(0.13  0.020 60)",
+        "color": [0.0508637, 0.0222949, 0.0077011, 1]
+      },
+      "mail-row-bg-hover": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 5%, oklch(0.13  0.020 60))",
+        "color": [0.0871163, 0.0550733, 0.02992, 1]
+      },
+      "mail-row-bg-selected": {
+        "text": "color-mix(in oklab, oklch(0.66 0.20 295) 13%, oklch(0.13  0.020 60))",
+        "color": [0.110351, 0.0708659, 0.0995212, 1]
+      },
+      "mail-row-compact": {
+        "text": "2rem",
+        "px": 32
+      },
+      "mail-sender-w": {
+        "text": "9rem",
+        "px": 144
+      },
+      "measure-reading": {
+        "text": "70ch",
+        "px": 560
+      },
+      "measure-thread": {
+        "text": "48rem",
+        "px": 768
+      },
+      "menu-fade": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "mono-active": {
+        "text": "oklch(0.88 0 0)",
+        "color": [0.844088, 0.844244, 0.844259, 1]
+      },
+      "mono-base": {
+        "text": "oklch(0.95 0 0)",
+        "color": [0.934359, 0.934529, 0.934546, 1]
+      },
+      "mono-hover": {
+        "text": "oklch(1.00 0 0)",
+        "color": [0.999871, 1.00005, 1.00007, 1]
+      },
+      "motion-base": {
+        "text": "180ms",
+        "ms": 180
+      },
+      "motion-fade": {
+        "text": "100ms",
+        "ms": 100
+      },
+      "motion-fast": {
+        "text": "100ms",
+        "ms": 100
+      },
+      "motion-grow": {
+        "text": "0.96",
+        "number": 0.96
+      },
+      "motion-instant": {
+        "text": "0ms",
+        "ms": 0
+      },
+      "motion-shift": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "motion-slow": {
+        "text": "280ms",
+        "ms": 280
+      },
+      "motion-slower": {
+        "text": "500ms",
+        "ms": 500
+      },
+      "muted": {
+        "text": "oklch(0.225 0.029 60)",
+        "color": [0.148162, 0.0959559, 0.0530073, 1]
+      },
+      "muted-foreground": {
+        "text": "oklch(0.72  0.035 60)",
+        "color": [0.712319, 0.627299, 0.561275, 1]
+      },
+      "neutral-100": {
+        "text": "oklch(0.965 0 0)",
+        "color": [0.953923, 0.954098, 0.954115, 1]
+      },
+      "neutral-200": {
+        "text": "oklch(0.92  0 0)",
+        "color": [0.89546, 0.895625, 0.89564, 1]
+      },
+      "neutral-300": {
+        "text": "oklch(0.85  0 0)",
+        "color": [0.80594, 0.806089, 0.806103, 1]
+      },
+      "neutral-400": {
+        "text": "oklch(0.72  0 0)",
+        "color": [0.644624, 0.644745, 0.644756, 1]
+      },
+      "neutral-50": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "neutral-500": {
+        "text": "oklch(0.58  0 0)",
+        "color": [0.47893, 0.479022, 0.479031, 1]
+      },
+      "neutral-600": {
+        "text": "oklch(0.45  0 0)",
+        "color": [0.33379, 0.333857, 0.333863, 1]
+      },
+      "neutral-700": {
+        "text": "oklch(0.32  0 0)",
+        "color": [0.198885, 0.198929, 0.198933, 1]
+      },
+      "neutral-800": {
+        "text": "oklch(0.22  0 0)",
+        "color": [0.103938, 0.103965, 0.103968, 1]
+      },
+      "neutral-850": {
+        "text": "oklch(0.18  0 0)",
+        "color": [0.0686772, 0.0686986, 0.0687006, 1]
+      },
+      "neutral-900": {
+        "text": "oklch(0.14  0 0)",
+        "color": [0.035442, 0.0354568, 0.0354581, 1]
+      },
+      "neutral-950": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "neutral-975": {
+        "text": "oklch(0.07  0 0)",
+        "color": [0.00443026, 0.00443209, 0.00443227, 1]
+      },
+      "notes-meta-line-space": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "pad-x": {
+        "text": "1rem",
+        "px": 16
+      },
+      "pad-x-sm": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "pad-y": {
+        "text": "0.625rem",
+        "px": 10
+      },
+      "pad-y-sm": {
+        "text": "0.375rem",
+        "px": 6
+      },
+      "panel-gap": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "panel-inset": {
+        "text": "1rem",
+        "px": 16
+      },
+      "panel-pad": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "panel-strip-w": {
+        "text": "2.5rem",
+        "px": 40
+      },
+      "panel-title-top": {
+        "text": "calc(0.5rem + (2.25rem - 1.75rem) / 2)",
+        "px": 12
+      },
+      "pink-active": {
+        "text": "oklch(0.66 0.20 350)",
+        "color": [0.902108, 0.319679, 0.639826, 1]
+      },
+      "pink-base": {
+        "text": "oklch(0.71 0.20 350)",
+        "color": [0.972199, 0.385108, 0.701259, 1]
+      },
+      "pink-hover": {
+        "text": "oklch(0.76 0.20 350)",
+        "color": [1.04283, 0.449719, 0.763676, 1]
+      },
+      "popover": {
+        "text": "oklch(0.225 0.029 60)",
+        "color": [0.148162, 0.0959559, 0.0530073, 1]
+      },
+      "popover-foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "presence-reachable": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "primary": {
+        "text": "oklch(0.66 0.20 295)",
+        "color": [0.618675, 0.444413, 0.992972, 1]
+      },
+      "primary-active": {
+        "text": "oklch(0.60 0.20 295)",
+        "color": [0.549227, 0.368974, 0.911061, 1]
+      },
+      "primary-foreground": {
+        "text": "oklch(0.10 0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "primary-hover": {
+        "text": "oklch(0.72 0.20 295)",
+        "color": [0.689938, 0.520015, 1.07583, 1]
+      },
+      "radius": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "radius-full": {
+        "text": "9999px",
+        "px": 9999
+      },
+      "radius-lg": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "radius-md": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "radius-sm": {
+        "text": "0.25rem",
+        "px": 4
+      },
+      "radius-xl": {
+        "text": "1rem",
+        "px": 16
+      },
+      "red-active": {
+        "text": "oklch(0.60 0.22 25)",
+        "color": [0.902936, 0.167951, 0.205093, 1]
+      },
+      "red-base": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "red-hover": {
+        "text": "oklch(0.72 0.22 25)",
+        "color": [1.07723, 0.356321, 0.349826, 1]
+      },
+      "ring": {
+        "text": "oklch(0.66 0.20 295)",
+        "color": [0.618675, 0.444413, 0.992972, 1]
+      },
+      "row-first-line-pad": {
+        "text": "calc((1.625rem - 1lh) / 2)",
+        "px": 4
+      },
+      "row-h": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "row-h-sm": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "scrim": {
+        "text": "color-mix(in oklab, oklch(0.13  0.020 60) 82%, transparent)",
+        "color": [0.0508637, 0.0222949, 0.0077011, 0.82]
+      },
+      "scroll-thumb": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 16%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.16]
+      },
+      "scroll-thumb-hover": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 32%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.32]
+      },
+      "search-match-bg": {
+        "text": "color-mix(in oklab, oklch(0.66 0.20 295) 32%, transparent)",
+        "color": [0.618675, 0.444413, 0.992972, 0.32]
+      },
+      "secondary": {
+        "text": "oklch(0.27  0.032 60)",
+        "color": [0.196447, 0.136133, 0.087023, 1]
+      },
+      "secondary-foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "selected-bg": {
+        "text": "color-mix(in oklab, oklch(0.66 0.20 295) 14%, oklch(0.185 0.026 60))",
+        "color": [0.166754, 0.11542, 0.143128, 1]
+      },
+      "selected-border": {
+        "text": "oklch(0.66 0.20 295)",
+        "color": [0.618675, 0.444413, 0.992972, 1]
+      },
+      "shadow-control-raised": {
+        "text": "0 0 0 0 transparent",
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px"
+      },
+      "shadow-lg": {
+        "text": "0 12px 32px rgb(0 0 0 / 0.55)",
+        "shadow": "rgba(0, 0, 0, 0.55) 0px 12px 32px 0px"
+      },
+      "shadow-md": {
+        "text": "0 4px 12px rgb(0 0 0 / 0.45)",
+        "shadow": "rgba(0, 0, 0, 0.45) 0px 4px 12px 0px"
+      },
+      "shadow-overlay": {
+        "text": "0 24px 64px rgb(0 0 0 / 0.65)",
+        "shadow": "rgba(0, 0, 0, 0.65) 0px 24px 64px 0px"
+      },
+      "shadow-sm": {
+        "text": "0 1px 2px rgb(0 0 0 / 0.35)",
+        "shadow": "rgba(0, 0, 0, 0.35) 0px 1px 2px 0px"
+      },
+      "shadow-xs": {
+        "text": "0 1px 0 rgb(0 0 0 / 0.30)",
+        "shadow": "rgba(0, 0, 0, 0.3) 0px 1px 0px 0px"
+      },
+      "state-active": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 9%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.09]
+      },
+      "state-active-hover": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 14%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.14]
+      },
+      "state-hover": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 5%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.05]
+      },
+      "state-selected": {
+        "text": "color-mix(in oklab, oklch(0.66 0.20 295) 13%, transparent)",
+        "color": [0.618675, 0.444413, 0.992972, 0.13]
+      },
+      "state-selected-edge": {
+        "text": "color-mix(in oklab, oklch(0.66 0.20 295) 32%, transparent)",
+        "color": [0.618675, 0.444413, 0.992972, 0.32]
+      },
+      "state-selected-hover": {
+        "text": "color-mix(in oklab, oklch(0.66 0.20 295) 18%, transparent)",
+        "color": [0.618675, 0.444413, 0.992972, 0.18]
+      },
+      "state-selected-ring": {
+        "text": "color-mix(in oklab, oklch(0.66 0.20 295) 32%, transparent)",
+        "color": [0.618675, 0.444413, 0.992972, 0.32]
+      },
+      "status-danger": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "status-info": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "status-success": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "status-warning": {
+        "text": "oklch(0.82 0.15 75)",
+        "color": [0.988912, 0.707733, 0.257336, 1]
+      },
+      "stream-fade-bottom": {
+        "text": "1.25rem",
+        "px": 20
+      },
+      "stream-fade-top": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "subtle-foreground": {
+        "text": "color-mix(in oklab, oklch(0.72  0.035 60) 86%, transparent)",
+        "color": [0.712319, 0.627299, 0.561275, 0.86]
+      },
+      "success": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "success-foreground": {
+        "text": "oklch(0.12 0 0)",
+        "color": [0.0223192, 0.0223284, 0.0223293, 1]
+      },
+      "tag-chip-surface": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 7%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.07]
+      },
+      "teal-active": {
+        "text": "oklch(0.66 0.13 200)",
+        "color": [-0.22677, 0.662694, 0.695718, 1]
+      },
+      "teal-base": {
+        "text": "oklch(0.72 0.13 200)",
+        "color": [-0.158331, 0.738114, 0.770725, 1]
+      },
+      "teal-hover": {
+        "text": "oklch(0.77 0.13 200)",
+        "color": [0.0365027, 0.801938, 0.834257, 1]
+      },
+      "text-2xl": {
+        "text": "1.5rem",
+        "px": 24
+      },
+      "text-2xs": {
+        "text": "0.6875rem",
+        "px": 11
+      },
+      "text-3xl": {
+        "text": "1.875rem",
+        "px": 30
+      },
+      "text-3xs": {
+        "text": "0.5625rem",
+        "px": 9
+      },
+      "text-4xl": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "text-5xl": {
+        "text": "3rem",
+        "px": 48
+      },
+      "text-base": {
+        "text": "0.875rem",
+        "px": 14
+      },
+      "text-lg": {
+        "text": "1.125rem",
+        "px": 18
+      },
+      "text-md": {
+        "text": "0.9375rem",
+        "px": 15
+      },
+      "text-selection": {
+        "text": "color-mix(in oklch, oklch(0.70 0.14 230) 38%, transparent)",
+        "color": [-0.0153564, 0.678468, 0.89443, 0.38]
+      },
+      "text-sm": {
+        "text": "0.8125rem",
+        "px": 13
+      },
+      "text-xl": {
+        "text": "1.25rem",
+        "px": 20
+      },
+      "text-xs": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "timeline-band": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 3.2%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.032]
+      },
+      "timeline-bar": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 9%, oklch(0.185 0.026 60))",
+        "color": [0.172306, 0.128173, 0.0930018, 1]
+      },
+      "timeline-grid": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 5.5%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.055]
+      },
+      "timeline-grid-strong": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 13%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.13]
+      },
+      "timeline-late": {
+        "text": "color-mix(in oklab, oklch(0.72  0.035 60) 46%, oklch(0.185 0.026 60))",
+        "color": [0.363957, 0.299794, 0.249386, 1]
+      },
+      "timeline-outline": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 24%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.24]
+      },
+      "timeline-progress": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 52%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.52]
+      },
+      "timeline-segment": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 16%, oklch(0.185 0.026 60))",
+        "color": [0.225724, 0.182805, 0.14909, 1]
+      },
+      "timeline-weekend": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 2.4%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.024]
+      },
+      "tracking-normal": {
+        "text": "0",
+        "px": 0,
+        "number": 0
+      },
+      "tracking-tight": {
+        "text": "-0.015em",
+        "px": -0.24
+      },
+      "tracking-wide": {
+        "text": "0.04em",
+        "px": 0.64
+      },
+      "tree-indent": {
+        "text": "0.875rem",
+        "px": 14
+      },
+      "violet-active": {
+        "text": "oklch(0.60 0.20 295)",
+        "color": [0.549227, 0.368974, 0.911061, 1]
+      },
+      "violet-base": {
+        "text": "oklch(0.66 0.20 295)",
+        "color": [0.618675, 0.444413, 0.992972, 1]
+      },
+      "violet-hover": {
+        "text": "oklch(0.72 0.20 295)",
+        "color": [0.689938, 0.520015, 1.07583, 1]
+      },
+      "warning": {
+        "text": "oklch(0.82 0.15 75)",
+        "color": [0.988912, 0.707733, 0.257336, 1]
+      },
+      "warning-foreground": {
+        "text": "oklch(0.12 0 0)",
+        "color": [0.0223192, 0.0223284, 0.0223293, 1]
+      },
+      "width-content-max": {
+        "text": "65rem",
+        "px": 1040
+      },
+      "width-prose-max": {
+        "text": "36rem",
+        "px": 576
+      },
+      "width-rail": {
+        "text": "20rem",
+        "px": 320
+      },
+      "width-sidebar": {
+        "text": "16rem",
+        "px": 256
+      },
+      "z-base": {
+        "text": "0",
+        "px": 0,
+        "number": 0
+      },
+      "z-debug": {
+        "text": "100",
+        "number": 100
+      },
+      "z-dialog": {
+        "text": "60",
+        "number": 60
+      },
+      "z-dropdown": {
+        "text": "70",
+        "number": 70
+      },
+      "z-header": {
+        "text": "30",
+        "number": 30
+      },
+      "z-overlay": {
+        "text": "50",
+        "number": 50
+      },
+      "z-popover": {
+        "text": "70",
+        "number": 70
+      },
+      "z-rail": {
+        "text": "20",
+        "number": 20
+      },
+      "z-sticky": {
+        "text": "10",
+        "number": 10
+      },
+      "z-toast": {
+        "text": "90",
+        "number": 90
+      },
+      "z-tooltip": {
+        "text": "80",
+        "number": 80
+      }
+    },
+    "dark-dense-sharp": {
+      "accent": {
+        "text": "oklch(0.22  0 0)",
+        "color": [0.103938, 0.103965, 0.103968, 1]
+      },
+      "accent-foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "amber-active": {
+        "text": "oklch(0.74 0.16 75)",
+        "color": [0.895885, 0.601328, -0.0782217, 1]
+      },
+      "amber-base": {
+        "text": "oklch(0.80 0.16 75)",
+        "color": [0.975754, 0.676548, 0.147226, 1]
+      },
+      "amber-hover": {
+        "text": "oklch(0.85 0.16 75)",
+        "color": [1.04312, 0.740142, 0.243151, 1]
+      },
+      "avatar-feed": {
+        "text": "1.5rem",
+        "px": 24
+      },
+      "avatar-radius": {
+        "text": "0",
+        "px": 0,
+        "number": 0
+      },
+      "background": {
+        "text": "oklch(0 0 0)",
+        "color": [0, 0, 0, 1]
+      },
+      "bar-h": {
+        "text": "3rem",
+        "px": 48
+      },
+      "blue-active": {
+        "text": "oklch(0.60 0.18 245)",
+        "color": [-0.200414, 0.524093, 0.889089, 1]
+      },
+      "blue-base": {
+        "text": "oklch(0.66 0.18 245)",
+        "color": [-0.150534, 0.599266, 0.970115, 1]
+      },
+      "blue-hover": {
+        "text": "oklch(0.72 0.18 245)",
+        "color": [0.026356, 0.675467, 1.05213, 1]
+      },
+      "board-card-w": {
+        "text": "16.5rem",
+        "px": 264
+      },
+      "board-col-w": {
+        "text": "calc(16.5rem + 0.5rem)",
+        "px": 272
+      },
+      "border": {
+        "text": "oklch(0.22  0 0)",
+        "color": [0.103938, 0.103965, 0.103968, 1]
+      },
+      "bp-2xl": {
+        "text": "1536px",
+        "px": 1536
+      },
+      "bp-lg": {
+        "text": "1024px",
+        "px": 1024
+      },
+      "bp-md": {
+        "text": "768px",
+        "px": 768
+      },
+      "bp-sm": {
+        "text": "640px",
+        "px": 640
+      },
+      "bp-xl": {
+        "text": "1280px",
+        "px": 1280
+      },
+      "cal-hour-h": {
+        "text": "2.75rem",
+        "px": 44
+      },
+      "cal-prep-chip-max": {
+        "text": "13.75rem",
+        "px": 220
+      },
+      "cal-zone-gutter-w": {
+        "text": "6.5rem",
+        "px": 104
+      },
+      "card": {
+        "text": "oklch(0.14  0 0)",
+        "color": [0.035442, 0.0354568, 0.0354581, 1]
+      },
+      "card-foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "code-comment": {
+        "text": "oklch(0.72  0 0)",
+        "color": [0.644624, 0.644745, 0.644756, 1]
+      },
+      "code-keyword": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "code-number": {
+        "text": "oklch(0.82 0.15 75)",
+        "color": [0.988912, 0.707733, 0.257336, 1]
+      },
+      "code-string": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "comment-mark-bg": {
+        "text": "color-mix(in oklch, oklch(0.82 0.15 75) 14%, transparent)",
+        "color": [0.988912, 0.707733, 0.257336, 0.14]
+      },
+      "comment-mark-bg-focused": {
+        "text": "color-mix(in oklch, oklch(0.82 0.15 75) 32%, transparent)",
+        "color": [0.988912, 0.707733, 0.257336, 0.32]
+      },
+      "comment-mark-line": {
+        "text": "color-mix(in oklch, oklch(0.82 0.15 75) 75%, transparent)",
+        "color": [0.988911, 0.707733, 0.257336, 0.75]
+      },
+      "control-raised": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 14%, oklch(0.18  0 0))",
+        "color": [0.172105, 0.172145, 0.172148, 1]
+      },
+      "ctrl-h": {
+        "text": "1.625rem",
+        "px": 26
+      },
+      "ctrl-h-lg": {
+        "text": "2rem",
+        "px": 32
+      },
+      "ctrl-h-sm": {
+        "text": "1.375rem",
+        "px": 22
+      },
+      "ctrl-h-xs": {
+        "text": "1.25rem",
+        "px": 20
+      },
+      "danger": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "danger-foreground": {
+        "text": "oklch(0.97 0 0)",
+        "color": [0.960462, 0.960638, 0.960654, 1]
+      },
+      "destructive": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "destructive-foreground": {
+        "text": "oklch(0.15 0 0)",
+        "color": [0.0434721, 0.0434891, 0.0434907, 1]
+      },
+      "ease-in": {
+        "text": "cubic-bezier(0.7, 0, 0.84, 0)"
+      },
+      "ease-in-out": {
+        "text": "cubic-bezier(0.65, 0, 0.35, 1)"
+      },
+      "ease-out": {
+        "text": "cubic-bezier(0.16, 1, 0.3, 1)"
+      },
+      "ease-spring": {
+        "text": "cubic-bezier(0.34, 1.56, 0.64, 1)"
+      },
+      "failed-list-max": {
+        "text": "calc(2rem * 5)",
+        "px": 160
+      },
+      "feed-media-max-h": {
+        "text": "15rem",
+        "px": 240
+      },
+      "feed-media-max-w": {
+        "text": "22.5rem",
+        "px": 360
+      },
+      "feed-person-gap": {
+        "text": "0.625rem",
+        "px": 10
+      },
+      "font-body": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-body-geist": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-body-inter": {
+        "text": "\"Inter\", \"Geist\", system-ui, -apple-system, sans-serif"
+      },
+      "font-body-mono": {
+        "text": "\"Geist Mono\", \"JetBrains Mono\", ui-monospace, SFMono-Regular, Menlo, monospace"
+      },
+      "font-body-serif": {
+        "text": "\"Source Serif Pro\", Georgia, serif"
+      },
+      "font-display": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-display-cal": {
+        "text": "\"Cal Sans\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-display-fraunces": {
+        "text": "\"Fraunces\", \"Source Serif Pro\", Georgia, serif"
+      },
+      "font-display-geist": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-display-pilat": {
+        "text": "\"Pilat Extended\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-mono": {
+        "text": "\"Geist Mono\", \"JetBrains Mono\", ui-monospace, SFMono-Regular, Menlo, monospace"
+      },
+      "font-ui": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-weight-bold": {
+        "text": "700",
+        "number": 700
+      },
+      "font-weight-medium": {
+        "text": "500",
+        "number": 500
+      },
+      "font-weight-regular": {
+        "text": "400",
+        "number": 400
+      },
+      "font-weight-semibold": {
+        "text": "600",
+        "number": 600
+      },
+      "foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "green-active": {
+        "text": "oklch(0.66 0.17 150)",
+        "color": [0.14027, 0.68145, 0.336667, 1]
+      },
+      "green-base": {
+        "text": "oklch(0.72 0.17 150)",
+        "color": [0.248581, 0.75748, 0.40813, 1]
+      },
+      "green-hover": {
+        "text": "oklch(0.78 0.17 150)",
+        "color": [0.33889, 0.834747, 0.480451, 1]
+      },
+      "hairline": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 10%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.1]
+      },
+      "hit-min": {
+        "text": "1.5rem",
+        "px": 24
+      },
+      "hue-spectrum": {
+        "text": "linear-gradient(to right, hsl(0 90% 60%), hsl(60 90% 60%), hsl(120 90% 60%), hsl(180 90% 60%), hsl(240 90% 60%), hsl(300 90% 60%), hsl(359 90% 60%))"
+      },
+      "icon": {
+        "text": "0.875rem",
+        "px": 14
+      },
+      "icon-lg": {
+        "text": "1rem",
+        "px": 16
+      },
+      "icon-sm": {
+        "text": "0.78125rem",
+        "px": 12.5
+      },
+      "icon-xs": {
+        "text": "0.6875rem",
+        "px": 11
+      },
+      "info": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "info-foreground": {
+        "text": "oklch(0.12 0 0)",
+        "color": [0.0223192, 0.0223284, 0.0223293, 1]
+      },
+      "input": {
+        "text": "oklch(0.18  0 0)",
+        "color": [0.0686772, 0.0686986, 0.0687006, 1]
+      },
+      "label": {
+        "text": "oklch(0.72  0 0)",
+        "color": [0.644624, 0.644745, 0.644756, 1]
+      },
+      "label-fill": {
+        "text": "color-mix(in oklab, oklch(0.72  0 0) 48%, oklch(0.14  0 0))",
+        "color": [0.299968, 0.300029, 0.300035, 1]
+      },
+      "label-surface": {
+        "text": "oklch(0.70 0 0 / 0.16)",
+        "color": [0.620417, 0.620533, 0.620544, 0.16]
+      },
+      "leading-normal": {
+        "text": "1.5",
+        "number": 1.5
+      },
+      "leading-relaxed": {
+        "text": "1.65",
+        "number": 1.65
+      },
+      "leading-snug": {
+        "text": "1.35",
+        "number": 1.35
+      },
+      "leading-tight": {
+        "text": "1.2",
+        "number": 1.2
+      },
+      "link": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "mail-group-h": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "mail-list-w": {
+        "text": "20rem",
+        "px": 320
+      },
+      "mail-rail-gap": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "mail-rail-row": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "mail-row-bg": {
+        "text": "oklch(0 0 0)",
+        "color": [0, 0, 0, 1]
+      },
+      "mail-row-bg-hover": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 5%, oklch(0 0 0))",
+        "color": [0.00154296, 0.0015436, 0.00154366, 1]
+      },
+      "mail-row-bg-selected": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 13%, oklch(0 0 0))",
+        "color": [0.0243296, 0.0243397, 0.0243407, 1]
+      },
+      "mail-row-compact": {
+        "text": "2rem",
+        "px": 32
+      },
+      "mail-sender-w": {
+        "text": "9rem",
+        "px": 144
+      },
+      "measure-reading": {
+        "text": "70ch",
+        "px": 560
+      },
+      "measure-thread": {
+        "text": "48rem",
+        "px": 768
+      },
+      "menu-fade": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "mono-active": {
+        "text": "oklch(0.88 0 0)",
+        "color": [0.844088, 0.844244, 0.844259, 1]
+      },
+      "mono-base": {
+        "text": "oklch(0.95 0 0)",
+        "color": [0.934359, 0.934529, 0.934546, 1]
+      },
+      "mono-hover": {
+        "text": "oklch(1.00 0 0)",
+        "color": [0.999871, 1.00005, 1.00007, 1]
+      },
+      "motion-base": {
+        "text": "180ms",
+        "ms": 180
+      },
+      "motion-fade": {
+        "text": "100ms",
+        "ms": 100
+      },
+      "motion-fast": {
+        "text": "100ms",
+        "ms": 100
+      },
+      "motion-grow": {
+        "text": "0.96",
+        "number": 0.96
+      },
+      "motion-instant": {
+        "text": "0ms",
+        "ms": 0
+      },
+      "motion-shift": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "motion-slow": {
+        "text": "280ms",
+        "ms": 280
+      },
+      "motion-slower": {
+        "text": "500ms",
+        "ms": 500
+      },
+      "muted": {
+        "text": "oklch(0.18  0 0)",
+        "color": [0.0686772, 0.0686986, 0.0687006, 1]
+      },
+      "muted-foreground": {
+        "text": "oklch(0.72  0 0)",
+        "color": [0.644624, 0.644745, 0.644756, 1]
+      },
+      "neutral-100": {
+        "text": "oklch(0.965 0 0)",
+        "color": [0.953923, 0.954098, 0.954115, 1]
+      },
+      "neutral-200": {
+        "text": "oklch(0.92  0 0)",
+        "color": [0.89546, 0.895625, 0.89564, 1]
+      },
+      "neutral-300": {
+        "text": "oklch(0.85  0 0)",
+        "color": [0.80594, 0.806089, 0.806103, 1]
+      },
+      "neutral-400": {
+        "text": "oklch(0.72  0 0)",
+        "color": [0.644624, 0.644745, 0.644756, 1]
+      },
+      "neutral-50": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "neutral-500": {
+        "text": "oklch(0.58  0 0)",
+        "color": [0.47893, 0.479022, 0.479031, 1]
+      },
+      "neutral-600": {
+        "text": "oklch(0.45  0 0)",
+        "color": [0.33379, 0.333857, 0.333863, 1]
+      },
+      "neutral-700": {
+        "text": "oklch(0.32  0 0)",
+        "color": [0.198885, 0.198929, 0.198933, 1]
+      },
+      "neutral-800": {
+        "text": "oklch(0.22  0 0)",
+        "color": [0.103938, 0.103965, 0.103968, 1]
+      },
+      "neutral-850": {
+        "text": "oklch(0.18  0 0)",
+        "color": [0.0686772, 0.0686986, 0.0687006, 1]
+      },
+      "neutral-900": {
+        "text": "oklch(0.14  0 0)",
+        "color": [0.035442, 0.0354568, 0.0354581, 1]
+      },
+      "neutral-950": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "neutral-975": {
+        "text": "oklch(0.07  0 0)",
+        "color": [0.00443026, 0.00443209, 0.00443227, 1]
+      },
+      "notes-meta-line-space": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "pad-x": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "pad-x-sm": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "pad-y": {
+        "text": "0.375rem",
+        "px": 6
+      },
+      "pad-y-sm": {
+        "text": "0.25rem",
+        "px": 4
+      },
+      "panel-gap": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "panel-inset": {
+        "text": "1rem",
+        "px": 16
+      },
+      "panel-pad": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "panel-strip-w": {
+        "text": "2.5rem",
+        "px": 40
+      },
+      "panel-title-top": {
+        "text": "calc(0.5rem + (1.75rem - 1.75rem) / 2)",
+        "px": 8
+      },
+      "pink-active": {
+        "text": "oklch(0.66 0.20 350)",
+        "color": [0.902108, 0.319679, 0.639826, 1]
+      },
+      "pink-base": {
+        "text": "oklch(0.71 0.20 350)",
+        "color": [0.972199, 0.385108, 0.701259, 1]
+      },
+      "pink-hover": {
+        "text": "oklch(0.76 0.20 350)",
+        "color": [1.04283, 0.449719, 0.763676, 1]
+      },
+      "popover": {
+        "text": "oklch(0.18  0 0)",
+        "color": [0.0686772, 0.0686986, 0.0687006, 1]
+      },
+      "popover-foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "presence-reachable": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "primary": {
+        "text": "oklch(0.95 0 0)",
+        "color": [0.934359, 0.934529, 0.934546, 1]
+      },
+      "primary-active": {
+        "text": "oklch(0.88 0 0)",
+        "color": [0.844088, 0.844244, 0.844259, 1]
+      },
+      "primary-foreground": {
+        "text": "oklch(0.10 0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "primary-hover": {
+        "text": "oklch(1.00 0 0)",
+        "color": [0.999871, 1.00005, 1.00007, 1]
+      },
+      "radius": {
+        "text": "0",
+        "px": 0,
+        "number": 0
+      },
+      "radius-full": {
+        "text": "9999px",
+        "px": 9999
+      },
+      "radius-lg": {
+        "text": "0",
+        "px": 0,
+        "number": 0
+      },
+      "radius-md": {
+        "text": "0",
+        "px": 0,
+        "number": 0
+      },
+      "radius-sm": {
+        "text": "0",
+        "px": 0,
+        "number": 0
+      },
+      "radius-xl": {
+        "text": "0",
+        "px": 0,
+        "number": 0
+      },
+      "red-active": {
+        "text": "oklch(0.60 0.22 25)",
+        "color": [0.902936, 0.167951, 0.205093, 1]
+      },
+      "red-base": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "red-hover": {
+        "text": "oklch(0.72 0.22 25)",
+        "color": [1.07723, 0.356321, 0.349826, 1]
+      },
+      "ring": {
+        "text": "oklch(0.95 0 0)",
+        "color": [0.934359, 0.934529, 0.934546, 1]
+      },
+      "row-first-line-pad": {
+        "text": "calc((1.375rem - 1lh) / 2)",
+        "px": 2
+      },
+      "row-h": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "row-h-sm": {
+        "text": "1.5rem",
+        "px": 24
+      },
+      "scrim": {
+        "text": "color-mix(in oklab, oklch(0 0 0) 82%, transparent)",
+        "color": [0, 0, 0, 0.82]
+      },
+      "scroll-thumb": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 16%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.16]
+      },
+      "scroll-thumb-hover": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 32%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.32]
+      },
+      "search-match-bg": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 32%, transparent)",
+        "color": [0.934359, 0.934529, 0.934546, 0.32]
+      },
+      "secondary": {
+        "text": "oklch(0.22  0 0)",
+        "color": [0.103938, 0.103965, 0.103968, 1]
+      },
+      "secondary-foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "selected-bg": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 14%, oklch(0.14  0 0))",
+        "color": [0.134652, 0.134685, 0.134688, 1]
+      },
+      "selected-border": {
+        "text": "oklch(0.95 0 0)",
+        "color": [0.934359, 0.934529, 0.934546, 1]
+      },
+      "shadow-control-raised": {
+        "text": "0 0 0 0 transparent",
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px"
+      },
+      "shadow-lg": {
+        "text": "0 12px 32px rgb(0 0 0 / 0.55)",
+        "shadow": "rgba(0, 0, 0, 0.55) 0px 12px 32px 0px"
+      },
+      "shadow-md": {
+        "text": "0 4px 12px rgb(0 0 0 / 0.45)",
+        "shadow": "rgba(0, 0, 0, 0.45) 0px 4px 12px 0px"
+      },
+      "shadow-overlay": {
+        "text": "0 24px 64px rgb(0 0 0 / 0.65)",
+        "shadow": "rgba(0, 0, 0, 0.65) 0px 24px 64px 0px"
+      },
+      "shadow-sm": {
+        "text": "0 1px 2px rgb(0 0 0 / 0.35)",
+        "shadow": "rgba(0, 0, 0, 0.35) 0px 1px 2px 0px"
+      },
+      "shadow-xs": {
+        "text": "0 1px 0 rgb(0 0 0 / 0.30)",
+        "shadow": "rgba(0, 0, 0, 0.3) 0px 1px 0px 0px"
+      },
+      "state-active": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 9%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.09]
+      },
+      "state-active-hover": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 14%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.14]
+      },
+      "state-hover": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 5%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.05]
+      },
+      "state-selected": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 13%, transparent)",
+        "color": [0.934359, 0.934529, 0.934546, 0.13]
+      },
+      "state-selected-edge": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 32%, transparent)",
+        "color": [0.934359, 0.934529, 0.934546, 0.32]
+      },
+      "state-selected-hover": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 18%, transparent)",
+        "color": [0.934359, 0.934529, 0.934546, 0.18]
+      },
+      "state-selected-ring": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 32%, transparent)",
+        "color": [0.934359, 0.934529, 0.934546, 0.32]
+      },
+      "status-danger": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "status-info": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "status-success": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "status-warning": {
+        "text": "oklch(0.82 0.15 75)",
+        "color": [0.988912, 0.707733, 0.257336, 1]
+      },
+      "stream-fade-bottom": {
+        "text": "1.25rem",
+        "px": 20
+      },
+      "stream-fade-top": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "subtle-foreground": {
+        "text": "color-mix(in oklab, oklch(0.72  0 0) 86%, transparent)",
+        "color": [0.644624, 0.644745, 0.644756, 0.86]
+      },
+      "success": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "success-foreground": {
+        "text": "oklch(0.12 0 0)",
+        "color": [0.0223192, 0.0223284, 0.0223293, 1]
+      },
+      "tag-chip-surface": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 7%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.07]
+      },
+      "teal-active": {
+        "text": "oklch(0.66 0.13 200)",
+        "color": [-0.22677, 0.662694, 0.695718, 1]
+      },
+      "teal-base": {
+        "text": "oklch(0.72 0.13 200)",
+        "color": [-0.158331, 0.738114, 0.770725, 1]
+      },
+      "teal-hover": {
+        "text": "oklch(0.77 0.13 200)",
+        "color": [0.0365027, 0.801938, 0.834257, 1]
+      },
+      "text-2xl": {
+        "text": "1.5rem",
+        "px": 24
+      },
+      "text-2xs": {
+        "text": "0.6875rem",
+        "px": 11
+      },
+      "text-3xl": {
+        "text": "1.875rem",
+        "px": 30
+      },
+      "text-3xs": {
+        "text": "0.5625rem",
+        "px": 9
+      },
+      "text-4xl": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "text-5xl": {
+        "text": "3rem",
+        "px": 48
+      },
+      "text-base": {
+        "text": "0.875rem",
+        "px": 14
+      },
+      "text-lg": {
+        "text": "1.125rem",
+        "px": 18
+      },
+      "text-md": {
+        "text": "0.9375rem",
+        "px": 15
+      },
+      "text-selection": {
+        "text": "color-mix(in oklch, oklch(0.70 0.14 230) 38%, transparent)",
+        "color": [-0.0153564, 0.678468, 0.89443, 0.38]
+      },
+      "text-sm": {
+        "text": "0.8125rem",
+        "px": 13
+      },
+      "text-xl": {
+        "text": "1.25rem",
+        "px": 20
+      },
+      "text-xs": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "timeline-band": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 3.2%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.032]
+      },
+      "timeline-bar": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 9%, oklch(0.14  0 0))",
+        "color": [0.100379, 0.100406, 0.100408, 1]
+      },
+      "timeline-grid": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 5.5%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.055]
+      },
+      "timeline-grid-strong": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 13%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.13]
+      },
+      "timeline-late": {
+        "text": "color-mix(in oklab, oklch(0.72  0 0) 46%, oklch(0.14  0 0))",
+        "color": [0.287709, 0.287768, 0.287774, 1]
+      },
+      "timeline-outline": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 24%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.24]
+      },
+      "timeline-progress": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 52%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.52]
+      },
+      "timeline-segment": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 16%, oklch(0.14  0 0))",
+        "color": [0.155261, 0.155298, 0.155301, 1]
+      },
+      "timeline-weekend": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 2.4%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.024]
+      },
+      "tracking-normal": {
+        "text": "0",
+        "px": 0,
+        "number": 0
+      },
+      "tracking-tight": {
+        "text": "-0.015em",
+        "px": -0.24
+      },
+      "tracking-wide": {
+        "text": "0.04em",
+        "px": 0.64
+      },
+      "tree-indent": {
+        "text": "0.875rem",
+        "px": 14
+      },
+      "violet-active": {
+        "text": "oklch(0.60 0.20 295)",
+        "color": [0.549227, 0.368974, 0.911061, 1]
+      },
+      "violet-base": {
+        "text": "oklch(0.66 0.20 295)",
+        "color": [0.618675, 0.444413, 0.992972, 1]
+      },
+      "violet-hover": {
+        "text": "oklch(0.72 0.20 295)",
+        "color": [0.689938, 0.520015, 1.07583, 1]
+      },
+      "warning": {
+        "text": "oklch(0.82 0.15 75)",
+        "color": [0.988912, 0.707733, 0.257336, 1]
+      },
+      "warning-foreground": {
+        "text": "oklch(0.12 0 0)",
+        "color": [0.0223192, 0.0223284, 0.0223293, 1]
+      },
+      "width-content-max": {
+        "text": "65rem",
+        "px": 1040
+      },
+      "width-prose-max": {
+        "text": "36rem",
+        "px": 576
+      },
+      "width-rail": {
+        "text": "20rem",
+        "px": 320
+      },
+      "width-sidebar": {
+        "text": "16rem",
+        "px": 256
+      },
+      "z-base": {
+        "text": "0",
+        "px": 0,
+        "number": 0
+      },
+      "z-debug": {
+        "text": "100",
+        "number": 100
+      },
+      "z-dialog": {
+        "text": "60",
+        "number": 60
+      },
+      "z-dropdown": {
+        "text": "70",
+        "number": 70
+      },
+      "z-header": {
+        "text": "30",
+        "number": 30
+      },
+      "z-overlay": {
+        "text": "50",
+        "number": 50
+      },
+      "z-popover": {
+        "text": "70",
+        "number": 70
+      },
+      "z-rail": {
+        "text": "20",
+        "number": 20
+      },
+      "z-sticky": {
+        "text": "10",
+        "number": 10
+      },
+      "z-toast": {
+        "text": "90",
+        "number": 90
+      },
+      "z-tooltip": {
+        "text": "80",
+        "number": 80
+      }
+    },
+    "light-mono": {
+      "accent": {
+        "text": "oklch(0.965 0 0)",
+        "color": [0.953923, 0.954098, 0.954115, 1]
+      },
+      "accent-foreground": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "amber-active": {
+        "text": "oklch(0.74 0.16 75)",
+        "color": [0.895885, 0.601328, -0.0782217, 1]
+      },
+      "amber-base": {
+        "text": "oklch(0.80 0.16 75)",
+        "color": [0.975754, 0.676548, 0.147226, 1]
+      },
+      "amber-hover": {
+        "text": "oklch(0.85 0.16 75)",
+        "color": [1.04312, 0.740142, 0.243151, 1]
+      },
+      "avatar-feed": {
+        "text": "2rem",
+        "px": 32
+      },
+      "avatar-radius": {
+        "text": "9999px",
+        "px": 9999
+      },
+      "background": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "bar-h": {
+        "text": "3rem",
+        "px": 48
+      },
+      "blue-active": {
+        "text": "oklch(0.60 0.18 245)",
+        "color": [-0.200414, 0.524093, 0.889089, 1]
+      },
+      "blue-base": {
+        "text": "oklch(0.66 0.18 245)",
+        "color": [-0.150534, 0.599266, 0.970115, 1]
+      },
+      "blue-hover": {
+        "text": "oklch(0.72 0.18 245)",
+        "color": [0.026356, 0.675467, 1.05213, 1]
+      },
+      "board-card-w": {
+        "text": "18.5rem",
+        "px": 296
+      },
+      "board-col-w": {
+        "text": "calc(18.5rem + 0.5rem)",
+        "px": 304
+      },
+      "border": {
+        "text": "oklch(0.92  0 0)",
+        "color": [0.89546, 0.895625, 0.89564, 1]
+      },
+      "bp-2xl": {
+        "text": "1536px",
+        "px": 1536
+      },
+      "bp-lg": {
+        "text": "1024px",
+        "px": 1024
+      },
+      "bp-md": {
+        "text": "768px",
+        "px": 768
+      },
+      "bp-sm": {
+        "text": "640px",
+        "px": 640
+      },
+      "bp-xl": {
+        "text": "1280px",
+        "px": 1280
+      },
+      "cal-hour-h": {
+        "text": "3.5rem",
+        "px": 56
+      },
+      "cal-prep-chip-max": {
+        "text": "13.75rem",
+        "px": 220
+      },
+      "cal-zone-gutter-w": {
+        "text": "6.5rem",
+        "px": 104
+      },
+      "card": {
+        "text": "oklch(1 0 0)",
+        "color": [0.999871, 1.00005, 1.00007, 1]
+      },
+      "card-foreground": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "code-comment": {
+        "text": "oklch(0.45  0 0)",
+        "color": [0.33379, 0.333857, 0.333863, 1]
+      },
+      "code-keyword": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "code-number": {
+        "text": "oklch(0.82 0.15 75)",
+        "color": [0.988912, 0.707733, 0.257336, 1]
+      },
+      "code-string": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "comment-mark-bg": {
+        "text": "color-mix(in oklch, oklch(0.82 0.15 75) 14%, transparent)",
+        "color": [0.988912, 0.707733, 0.257336, 0.14]
+      },
+      "comment-mark-bg-focused": {
+        "text": "color-mix(in oklch, oklch(0.82 0.15 75) 32%, transparent)",
+        "color": [0.988912, 0.707733, 0.257336, 0.32]
+      },
+      "comment-mark-line": {
+        "text": "color-mix(in oklch, oklch(0.82 0.15 75) 75%, transparent)",
+        "color": [0.988911, 0.707733, 0.257336, 0.75]
+      },
+      "control-raised": {
+        "text": "oklch(1 0 0)",
+        "color": [0.999871, 1.00005, 1.00007, 1]
+      },
+      "ctrl-h": {
+        "text": "2rem",
+        "px": 32
+      },
+      "ctrl-h-lg": {
+        "text": "2.5rem",
+        "px": 40
+      },
+      "ctrl-h-sm": {
+        "text": "1.625rem",
+        "px": 26
+      },
+      "ctrl-h-xs": {
+        "text": "1.5rem",
+        "px": 24
+      },
+      "danger": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "danger-foreground": {
+        "text": "oklch(0.97 0 0)",
+        "color": [0.960462, 0.960638, 0.960654, 1]
+      },
+      "destructive": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "destructive-foreground": {
+        "text": "oklch(0.97 0 0)",
+        "color": [0.960462, 0.960638, 0.960654, 1]
+      },
+      "ease-in": {
+        "text": "cubic-bezier(0.7, 0, 0.84, 0)"
+      },
+      "ease-in-out": {
+        "text": "cubic-bezier(0.65, 0, 0.35, 1)"
+      },
+      "ease-out": {
+        "text": "cubic-bezier(0.16, 1, 0.3, 1)"
+      },
+      "ease-spring": {
+        "text": "cubic-bezier(0.34, 1.56, 0.64, 1)"
+      },
+      "failed-list-max": {
+        "text": "calc(2rem * 5)",
+        "px": 160
+      },
+      "feed-media-max-h": {
+        "text": "15rem",
+        "px": 240
+      },
+      "feed-media-max-w": {
+        "text": "22.5rem",
+        "px": 360
+      },
+      "feed-person-gap": {
+        "text": "1.125rem",
+        "px": 18
+      },
+      "font-body": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-body-geist": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-body-inter": {
+        "text": "\"Inter\", \"Geist\", system-ui, -apple-system, sans-serif"
+      },
+      "font-body-mono": {
+        "text": "\"Geist Mono\", \"JetBrains Mono\", ui-monospace, SFMono-Regular, Menlo, monospace"
+      },
+      "font-body-serif": {
+        "text": "\"Source Serif Pro\", Georgia, serif"
+      },
+      "font-display": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-display-cal": {
+        "text": "\"Cal Sans\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-display-fraunces": {
+        "text": "\"Fraunces\", \"Source Serif Pro\", Georgia, serif"
+      },
+      "font-display-geist": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-display-pilat": {
+        "text": "\"Pilat Extended\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-mono": {
+        "text": "\"Geist Mono\", \"JetBrains Mono\", ui-monospace, SFMono-Regular, Menlo, monospace"
+      },
+      "font-ui": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-weight-bold": {
+        "text": "700",
+        "number": 700
+      },
+      "font-weight-medium": {
+        "text": "500",
+        "number": 500
+      },
+      "font-weight-regular": {
+        "text": "400",
+        "number": 400
+      },
+      "font-weight-semibold": {
+        "text": "600",
+        "number": 600
+      },
+      "foreground": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "green-active": {
+        "text": "oklch(0.66 0.17 150)",
+        "color": [0.14027, 0.68145, 0.336667, 1]
+      },
+      "green-base": {
+        "text": "oklch(0.72 0.17 150)",
+        "color": [0.248581, 0.75748, 0.40813, 1]
+      },
+      "green-hover": {
+        "text": "oklch(0.78 0.17 150)",
+        "color": [0.33889, 0.834747, 0.480451, 1]
+      },
+      "hairline": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 10%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.1]
+      },
+      "hit-min": {
+        "text": "1.5rem",
+        "px": 24
+      },
+      "hue-spectrum": {
+        "text": "linear-gradient(to right, hsl(0 90% 60%), hsl(60 90% 60%), hsl(120 90% 60%), hsl(180 90% 60%), hsl(240 90% 60%), hsl(300 90% 60%), hsl(359 90% 60%))"
+      },
+      "icon": {
+        "text": "1rem",
+        "px": 16
+      },
+      "icon-lg": {
+        "text": "1.25rem",
+        "px": 20
+      },
+      "icon-sm": {
+        "text": "0.875rem",
+        "px": 14
+      },
+      "icon-xs": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "info": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "info-foreground": {
+        "text": "oklch(0.97 0 0)",
+        "color": [0.960462, 0.960638, 0.960654, 1]
+      },
+      "input": {
+        "text": "oklch(0.965 0 0)",
+        "color": [0.953923, 0.954098, 0.954115, 1]
+      },
+      "label": {
+        "text": "oklch(0.72  0 0)",
+        "color": [0.644624, 0.644745, 0.644756, 1]
+      },
+      "label-fill": {
+        "text": "color-mix(in oklab, oklch(0.72  0 0) 48%, oklch(1 0 0))",
+        "color": [0.825736, 0.825888, 0.825903, 1]
+      },
+      "label-surface": {
+        "text": "oklch(0.70 0 0 / 0.16)",
+        "color": [0.620417, 0.620533, 0.620544, 0.16]
+      },
+      "leading-normal": {
+        "text": "1.5",
+        "number": 1.5
+      },
+      "leading-relaxed": {
+        "text": "1.65",
+        "number": 1.65
+      },
+      "leading-snug": {
+        "text": "1.35",
+        "number": 1.35
+      },
+      "leading-tight": {
+        "text": "1.2",
+        "number": 1.2
+      },
+      "link": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "mail-group-h": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "mail-list-w": {
+        "text": "20rem",
+        "px": 320
+      },
+      "mail-rail-gap": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "mail-rail-row": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "mail-row-bg": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "mail-row-bg-hover": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 5%, oklch(0.985 0 0))",
+        "color": [0.922332, 0.922501, 0.922516, 1]
+      },
+      "mail-row-bg-selected": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 13%, oklch(0.985 0 0))",
+        "color": [0.831272, 0.831425, 0.83144, 1]
+      },
+      "mail-row-compact": {
+        "text": "2rem",
+        "px": 32
+      },
+      "mail-sender-w": {
+        "text": "9rem",
+        "px": 144
+      },
+      "measure-reading": {
+        "text": "70ch",
+        "px": 560
+      },
+      "measure-thread": {
+        "text": "48rem",
+        "px": 768
+      },
+      "menu-fade": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "mono-active": {
+        "text": "oklch(0.88 0 0)",
+        "color": [0.844088, 0.844244, 0.844259, 1]
+      },
+      "mono-base": {
+        "text": "oklch(0.95 0 0)",
+        "color": [0.934359, 0.934529, 0.934546, 1]
+      },
+      "mono-hover": {
+        "text": "oklch(1.00 0 0)",
+        "color": [0.999871, 1.00005, 1.00007, 1]
+      },
+      "motion-base": {
+        "text": "180ms",
+        "ms": 180
+      },
+      "motion-fade": {
+        "text": "100ms",
+        "ms": 100
+      },
+      "motion-fast": {
+        "text": "100ms",
+        "ms": 100
+      },
+      "motion-grow": {
+        "text": "0.96",
+        "number": 0.96
+      },
+      "motion-instant": {
+        "text": "0ms",
+        "ms": 0
+      },
+      "motion-shift": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "motion-slow": {
+        "text": "280ms",
+        "ms": 280
+      },
+      "motion-slower": {
+        "text": "500ms",
+        "ms": 500
+      },
+      "muted": {
+        "text": "oklch(0.965 0 0)",
+        "color": [0.953923, 0.954098, 0.954115, 1]
+      },
+      "muted-foreground": {
+        "text": "oklch(0.45  0 0)",
+        "color": [0.33379, 0.333857, 0.333863, 1]
+      },
+      "neutral-100": {
+        "text": "oklch(0.965 0 0)",
+        "color": [0.953923, 0.954098, 0.954115, 1]
+      },
+      "neutral-200": {
+        "text": "oklch(0.92  0 0)",
+        "color": [0.89546, 0.895625, 0.89564, 1]
+      },
+      "neutral-300": {
+        "text": "oklch(0.85  0 0)",
+        "color": [0.80594, 0.806089, 0.806103, 1]
+      },
+      "neutral-400": {
+        "text": "oklch(0.72  0 0)",
+        "color": [0.644624, 0.644745, 0.644756, 1]
+      },
+      "neutral-50": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "neutral-500": {
+        "text": "oklch(0.58  0 0)",
+        "color": [0.47893, 0.479022, 0.479031, 1]
+      },
+      "neutral-600": {
+        "text": "oklch(0.45  0 0)",
+        "color": [0.33379, 0.333857, 0.333863, 1]
+      },
+      "neutral-700": {
+        "text": "oklch(0.32  0 0)",
+        "color": [0.198885, 0.198929, 0.198933, 1]
+      },
+      "neutral-800": {
+        "text": "oklch(0.22  0 0)",
+        "color": [0.103938, 0.103965, 0.103968, 1]
+      },
+      "neutral-850": {
+        "text": "oklch(0.18  0 0)",
+        "color": [0.0686772, 0.0686986, 0.0687006, 1]
+      },
+      "neutral-900": {
+        "text": "oklch(0.14  0 0)",
+        "color": [0.035442, 0.0354568, 0.0354581, 1]
+      },
+      "neutral-950": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "neutral-975": {
+        "text": "oklch(0.07  0 0)",
+        "color": [0.00443026, 0.00443209, 0.00443227, 1]
+      },
+      "notes-meta-line-space": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "pad-x": {
+        "text": "1rem",
+        "px": 16
+      },
+      "pad-x-sm": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "pad-y": {
+        "text": "0.625rem",
+        "px": 10
+      },
+      "pad-y-sm": {
+        "text": "0.375rem",
+        "px": 6
+      },
+      "panel-gap": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "panel-inset": {
+        "text": "1rem",
+        "px": 16
+      },
+      "panel-pad": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "panel-strip-w": {
+        "text": "2.5rem",
+        "px": 40
+      },
+      "panel-title-top": {
+        "text": "calc(0.5rem + (2.25rem - 1.75rem) / 2)",
+        "px": 12
+      },
+      "pink-active": {
+        "text": "oklch(0.66 0.20 350)",
+        "color": [0.902108, 0.319679, 0.639826, 1]
+      },
+      "pink-base": {
+        "text": "oklch(0.71 0.20 350)",
+        "color": [0.972199, 0.385108, 0.701259, 1]
+      },
+      "pink-hover": {
+        "text": "oklch(0.76 0.20 350)",
+        "color": [1.04283, 0.449719, 0.763676, 1]
+      },
+      "popover": {
+        "text": "oklch(1 0 0)",
+        "color": [0.999871, 1.00005, 1.00007, 1]
+      },
+      "popover-foreground": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "presence-reachable": {
+        "text": "oklch(0.6 0.15 145)",
+        "color": [0.225845, 0.590611, 0.259696, 1]
+      },
+      "primary": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "primary-active": {
+        "text": "oklch(0.22  0 0)",
+        "color": [0.103938, 0.103965, 0.103968, 1]
+      },
+      "primary-foreground": {
+        "text": "oklch(0.97 0 0)",
+        "color": [0.960462, 0.960638, 0.960654, 1]
+      },
+      "primary-hover": {
+        "text": "oklch(0.14  0 0)",
+        "color": [0.035442, 0.0354568, 0.0354581, 1]
+      },
+      "radius": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "radius-full": {
+        "text": "9999px",
+        "px": 9999
+      },
+      "radius-lg": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "radius-md": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "radius-sm": {
+        "text": "0.25rem",
+        "px": 4
+      },
+      "radius-xl": {
+        "text": "1rem",
+        "px": 16
+      },
+      "red-active": {
+        "text": "oklch(0.60 0.22 25)",
+        "color": [0.902936, 0.167951, 0.205093, 1]
+      },
+      "red-base": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "red-hover": {
+        "text": "oklch(0.72 0.22 25)",
+        "color": [1.07723, 0.356321, 0.349826, 1]
+      },
+      "ring": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "row-first-line-pad": {
+        "text": "calc((1.625rem - 1lh) / 2)",
+        "px": 4
+      },
+      "row-h": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "row-h-sm": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "scrim": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 82%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.82]
+      },
+      "scroll-thumb": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 16%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.16]
+      },
+      "scroll-thumb-hover": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 32%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.32]
+      },
+      "search-match-bg": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 32%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.32]
+      },
+      "secondary": {
+        "text": "oklch(0.965 0 0)",
+        "color": [0.953923, 0.954098, 0.954115, 1]
+      },
+      "secondary-foreground": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "selected-bg": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 14%, oklch(1 0 0))",
+        "color": [0.836432, 0.836587, 0.836601, 1]
+      },
+      "selected-border": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "shadow-control-raised": {
+        "text": "0 1px 2px rgb(0 0 0 / 0.08)",
+        "shadow": "rgba(0, 0, 0, 0.08) 0px 1px 2px 0px"
+      },
+      "shadow-lg": {
+        "text": "0 12px 32px rgb(0 0 0 / 0.14)",
+        "shadow": "rgba(0, 0, 0, 0.14) 0px 12px 32px 0px"
+      },
+      "shadow-md": {
+        "text": "0 4px 12px rgb(0 0 0 / 0.10)",
+        "shadow": "rgba(0, 0, 0, 0.1) 0px 4px 12px 0px"
+      },
+      "shadow-overlay": {
+        "text": "0 24px 64px rgb(0 0 0 / 0.20)",
+        "shadow": "rgba(0, 0, 0, 0.2) 0px 24px 64px 0px"
+      },
+      "shadow-sm": {
+        "text": "0 1px 2px rgb(0 0 0 / 0.08)",
+        "shadow": "rgba(0, 0, 0, 0.08) 0px 1px 2px 0px"
+      },
+      "shadow-xs": {
+        "text": "0 1px 0 rgb(0 0 0 / 0.05)",
+        "shadow": "rgba(0, 0, 0, 0.05) 0px 1px 0px 0px"
+      },
+      "state-active": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 9%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.09]
+      },
+      "state-active-hover": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 14%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.14]
+      },
+      "state-hover": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 5%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.05]
+      },
+      "state-selected": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 13%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.13]
+      },
+      "state-selected-edge": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 32%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.32]
+      },
+      "state-selected-hover": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 18%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.18]
+      },
+      "state-selected-ring": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 32%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.32]
+      },
+      "status-danger": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "status-info": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "status-success": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "status-warning": {
+        "text": "oklch(0.82 0.15 75)",
+        "color": [0.988912, 0.707733, 0.257336, 1]
+      },
+      "stream-fade-bottom": {
+        "text": "1.25rem",
+        "px": 20
+      },
+      "stream-fade-top": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "subtle-foreground": {
+        "text": "color-mix(in oklab, oklch(0.45  0 0) 86%, transparent)",
+        "color": [0.33379, 0.333857, 0.333863, 0.86]
+      },
+      "success": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "success-foreground": {
+        "text": "oklch(0.97 0 0)",
+        "color": [0.960462, 0.960638, 0.960654, 1]
+      },
+      "tag-chip-surface": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 6%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.06]
+      },
+      "teal-active": {
+        "text": "oklch(0.66 0.13 200)",
+        "color": [-0.22677, 0.662694, 0.695718, 1]
+      },
+      "teal-base": {
+        "text": "oklch(0.72 0.13 200)",
+        "color": [-0.158331, 0.738114, 0.770725, 1]
+      },
+      "teal-hover": {
+        "text": "oklch(0.77 0.13 200)",
+        "color": [0.0365027, 0.801938, 0.834257, 1]
+      },
+      "text-2xl": {
+        "text": "1.5rem",
+        "px": 24
+      },
+      "text-2xs": {
+        "text": "0.6875rem",
+        "px": 11
+      },
+      "text-3xl": {
+        "text": "1.875rem",
+        "px": 30
+      },
+      "text-3xs": {
+        "text": "0.5625rem",
+        "px": 9
+      },
+      "text-4xl": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "text-5xl": {
+        "text": "3rem",
+        "px": 48
+      },
+      "text-base": {
+        "text": "0.875rem",
+        "px": 14
+      },
+      "text-lg": {
+        "text": "1.125rem",
+        "px": 18
+      },
+      "text-md": {
+        "text": "0.9375rem",
+        "px": 15
+      },
+      "text-selection": {
+        "text": "color-mix(in oklch, oklch(0.70 0.14 230) 38%, transparent)",
+        "color": [-0.0153564, 0.678468, 0.89443, 0.38]
+      },
+      "text-sm": {
+        "text": "0.8125rem",
+        "px": 13
+      },
+      "text-xl": {
+        "text": "1.25rem",
+        "px": 20
+      },
+      "text-xs": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "timeline-band": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 3.2%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.032]
+      },
+      "timeline-bar": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 9%, oklch(1 0 0))",
+        "color": [0.894169, 0.894333, 0.894349, 1]
+      },
+      "timeline-grid": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 5.5%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.055]
+      },
+      "timeline-grid-strong": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 13%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.13]
+      },
+      "timeline-late": {
+        "text": "color-mix(in oklab, oklch(0.45  0 0) 46%, oklch(1 0 0))",
+        "color": [0.677571, 0.677698, 0.67771, 1]
+      },
+      "timeline-outline": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 24%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.24]
+      },
+      "timeline-progress": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 52%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.52]
+      },
+      "timeline-segment": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 16%, oklch(1 0 0))",
+        "color": [0.813543, 0.813693, 0.813707, 1]
+      },
+      "timeline-weekend": {
+        "text": "color-mix(in oklab, oklch(0.10  0 0) 2.4%, transparent)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 0.024]
+      },
+      "tracking-normal": {
+        "text": "0",
+        "px": 0,
+        "number": 0
+      },
+      "tracking-tight": {
+        "text": "-0.015em",
+        "px": -0.24
+      },
+      "tracking-wide": {
+        "text": "0.04em",
+        "px": 0.64
+      },
+      "tree-indent": {
+        "text": "0.875rem",
+        "px": 14
+      },
+      "violet-active": {
+        "text": "oklch(0.60 0.20 295)",
+        "color": [0.549227, 0.368974, 0.911061, 1]
+      },
+      "violet-base": {
+        "text": "oklch(0.66 0.20 295)",
+        "color": [0.618675, 0.444413, 0.992972, 1]
+      },
+      "violet-hover": {
+        "text": "oklch(0.72 0.20 295)",
+        "color": [0.689938, 0.520015, 1.07583, 1]
+      },
+      "warning": {
+        "text": "oklch(0.82 0.15 75)",
+        "color": [0.988912, 0.707733, 0.257336, 1]
+      },
+      "warning-foreground": {
+        "text": "oklch(0.15 0 0)",
+        "color": [0.0434721, 0.0434891, 0.0434907, 1]
+      },
+      "width-content-max": {
+        "text": "65rem",
+        "px": 1040
+      },
+      "width-prose-max": {
+        "text": "36rem",
+        "px": 576
+      },
+      "width-rail": {
+        "text": "20rem",
+        "px": 320
+      },
+      "width-sidebar": {
+        "text": "16rem",
+        "px": 256
+      },
+      "z-base": {
+        "text": "0",
+        "px": 0,
+        "number": 0
+      },
+      "z-debug": {
+        "text": "100",
+        "number": 100
+      },
+      "z-dialog": {
+        "text": "60",
+        "number": 60
+      },
+      "z-dropdown": {
+        "text": "70",
+        "number": 70
+      },
+      "z-header": {
+        "text": "30",
+        "number": 30
+      },
+      "z-overlay": {
+        "text": "50",
+        "number": 50
+      },
+      "z-popover": {
+        "text": "70",
+        "number": 70
+      },
+      "z-rail": {
+        "text": "20",
+        "number": 20
+      },
+      "z-sticky": {
+        "text": "10",
+        "number": 10
+      },
+      "z-toast": {
+        "text": "90",
+        "number": 90
+      },
+      "z-tooltip": {
+        "text": "80",
+        "number": 80
+      }
+    },
+    "dark-reduced-motion": {
+      "accent": {
+        "text": "oklch(0.22  0 0)",
+        "color": [0.103938, 0.103965, 0.103968, 1]
+      },
+      "accent-foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "amber-active": {
+        "text": "oklch(0.74 0.16 75)",
+        "color": [0.895885, 0.601328, -0.0782217, 1]
+      },
+      "amber-base": {
+        "text": "oklch(0.80 0.16 75)",
+        "color": [0.975754, 0.676548, 0.147226, 1]
+      },
+      "amber-hover": {
+        "text": "oklch(0.85 0.16 75)",
+        "color": [1.04312, 0.740142, 0.243151, 1]
+      },
+      "avatar-feed": {
+        "text": "2rem",
+        "px": 32
+      },
+      "avatar-radius": {
+        "text": "9999px",
+        "px": 9999
+      },
+      "background": {
+        "text": "oklch(0 0 0)",
+        "color": [0, 0, 0, 1]
+      },
+      "bar-h": {
+        "text": "3rem",
+        "px": 48
+      },
+      "blue-active": {
+        "text": "oklch(0.60 0.18 245)",
+        "color": [-0.200414, 0.524093, 0.889089, 1]
+      },
+      "blue-base": {
+        "text": "oklch(0.66 0.18 245)",
+        "color": [-0.150534, 0.599266, 0.970115, 1]
+      },
+      "blue-hover": {
+        "text": "oklch(0.72 0.18 245)",
+        "color": [0.026356, 0.675467, 1.05213, 1]
+      },
+      "board-card-w": {
+        "text": "18.5rem",
+        "px": 296
+      },
+      "board-col-w": {
+        "text": "calc(18.5rem + 0.5rem)",
+        "px": 304
+      },
+      "border": {
+        "text": "oklch(0.22  0 0)",
+        "color": [0.103938, 0.103965, 0.103968, 1]
+      },
+      "bp-2xl": {
+        "text": "1536px",
+        "px": 1536
+      },
+      "bp-lg": {
+        "text": "1024px",
+        "px": 1024
+      },
+      "bp-md": {
+        "text": "768px",
+        "px": 768
+      },
+      "bp-sm": {
+        "text": "640px",
+        "px": 640
+      },
+      "bp-xl": {
+        "text": "1280px",
+        "px": 1280
+      },
+      "cal-hour-h": {
+        "text": "3.5rem",
+        "px": 56
+      },
+      "cal-prep-chip-max": {
+        "text": "13.75rem",
+        "px": 220
+      },
+      "cal-zone-gutter-w": {
+        "text": "6.5rem",
+        "px": 104
+      },
+      "card": {
+        "text": "oklch(0.14  0 0)",
+        "color": [0.035442, 0.0354568, 0.0354581, 1]
+      },
+      "card-foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "code-comment": {
+        "text": "oklch(0.72  0 0)",
+        "color": [0.644624, 0.644745, 0.644756, 1]
+      },
+      "code-keyword": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "code-number": {
+        "text": "oklch(0.82 0.15 75)",
+        "color": [0.988912, 0.707733, 0.257336, 1]
+      },
+      "code-string": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "comment-mark-bg": {
+        "text": "color-mix(in oklch, oklch(0.82 0.15 75) 14%, transparent)",
+        "color": [0.988912, 0.707733, 0.257336, 0.14]
+      },
+      "comment-mark-bg-focused": {
+        "text": "color-mix(in oklch, oklch(0.82 0.15 75) 32%, transparent)",
+        "color": [0.988912, 0.707733, 0.257336, 0.32]
+      },
+      "comment-mark-line": {
+        "text": "color-mix(in oklch, oklch(0.82 0.15 75) 75%, transparent)",
+        "color": [0.988911, 0.707733, 0.257336, 0.75]
+      },
+      "control-raised": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 14%, oklch(0.18  0 0))",
+        "color": [0.172105, 0.172145, 0.172148, 1]
+      },
+      "ctrl-h": {
+        "text": "2rem",
+        "px": 32
+      },
+      "ctrl-h-lg": {
+        "text": "2.5rem",
+        "px": 40
+      },
+      "ctrl-h-sm": {
+        "text": "1.625rem",
+        "px": 26
+      },
+      "ctrl-h-xs": {
+        "text": "1.5rem",
+        "px": 24
+      },
+      "danger": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "danger-foreground": {
+        "text": "oklch(0.97 0 0)",
+        "color": [0.960462, 0.960638, 0.960654, 1]
+      },
+      "destructive": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "destructive-foreground": {
+        "text": "oklch(0.15 0 0)",
+        "color": [0.0434721, 0.0434891, 0.0434907, 1]
+      },
+      "ease-in": {
+        "text": "cubic-bezier(0.7, 0, 0.84, 0)"
+      },
+      "ease-in-out": {
+        "text": "cubic-bezier(0.65, 0, 0.35, 1)"
+      },
+      "ease-out": {
+        "text": "cubic-bezier(0.16, 1, 0.3, 1)"
+      },
+      "ease-spring": {
+        "text": "cubic-bezier(0.34, 1.56, 0.64, 1)"
+      },
+      "failed-list-max": {
+        "text": "calc(2rem * 5)",
+        "px": 160
+      },
+      "feed-media-max-h": {
+        "text": "15rem",
+        "px": 240
+      },
+      "feed-media-max-w": {
+        "text": "22.5rem",
+        "px": 360
+      },
+      "feed-person-gap": {
+        "text": "1.125rem",
+        "px": 18
+      },
+      "font-body": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-body-geist": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-body-inter": {
+        "text": "\"Inter\", \"Geist\", system-ui, -apple-system, sans-serif"
+      },
+      "font-body-mono": {
+        "text": "\"Geist Mono\", \"JetBrains Mono\", ui-monospace, SFMono-Regular, Menlo, monospace"
+      },
+      "font-body-serif": {
+        "text": "\"Source Serif Pro\", Georgia, serif"
+      },
+      "font-display": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-display-cal": {
+        "text": "\"Cal Sans\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-display-fraunces": {
+        "text": "\"Fraunces\", \"Source Serif Pro\", Georgia, serif"
+      },
+      "font-display-geist": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-display-pilat": {
+        "text": "\"Pilat Extended\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-mono": {
+        "text": "\"Geist Mono\", \"JetBrains Mono\", ui-monospace, SFMono-Regular, Menlo, monospace"
+      },
+      "font-ui": {
+        "text": "\"Geist\", \"Inter\", system-ui, -apple-system, sans-serif"
+      },
+      "font-weight-bold": {
+        "text": "700",
+        "number": 700
+      },
+      "font-weight-medium": {
+        "text": "500",
+        "number": 500
+      },
+      "font-weight-regular": {
+        "text": "400",
+        "number": 400
+      },
+      "font-weight-semibold": {
+        "text": "600",
+        "number": 600
+      },
+      "foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "green-active": {
+        "text": "oklch(0.66 0.17 150)",
+        "color": [0.14027, 0.68145, 0.336667, 1]
+      },
+      "green-base": {
+        "text": "oklch(0.72 0.17 150)",
+        "color": [0.248581, 0.75748, 0.40813, 1]
+      },
+      "green-hover": {
+        "text": "oklch(0.78 0.17 150)",
+        "color": [0.33889, 0.834747, 0.480451, 1]
+      },
+      "hairline": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 10%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.1]
+      },
+      "hit-min": {
+        "text": "1.5rem",
+        "px": 24
+      },
+      "hue-spectrum": {
+        "text": "linear-gradient(to right, hsl(0 90% 60%), hsl(60 90% 60%), hsl(120 90% 60%), hsl(180 90% 60%), hsl(240 90% 60%), hsl(300 90% 60%), hsl(359 90% 60%))"
+      },
+      "icon": {
+        "text": "1rem",
+        "px": 16
+      },
+      "icon-lg": {
+        "text": "1.25rem",
+        "px": 20
+      },
+      "icon-sm": {
+        "text": "0.875rem",
+        "px": 14
+      },
+      "icon-xs": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "info": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "info-foreground": {
+        "text": "oklch(0.12 0 0)",
+        "color": [0.0223192, 0.0223284, 0.0223293, 1]
+      },
+      "input": {
+        "text": "oklch(0.18  0 0)",
+        "color": [0.0686772, 0.0686986, 0.0687006, 1]
+      },
+      "label": {
+        "text": "oklch(0.72  0 0)",
+        "color": [0.644624, 0.644745, 0.644756, 1]
+      },
+      "label-fill": {
+        "text": "color-mix(in oklab, oklch(0.72  0 0) 48%, oklch(0.14  0 0))",
+        "color": [0.299968, 0.300029, 0.300035, 1]
+      },
+      "label-surface": {
+        "text": "oklch(0.70 0 0 / 0.16)",
+        "color": [0.620417, 0.620533, 0.620544, 0.16]
+      },
+      "leading-normal": {
+        "text": "1.5",
+        "number": 1.5
+      },
+      "leading-relaxed": {
+        "text": "1.65",
+        "number": 1.65
+      },
+      "leading-snug": {
+        "text": "1.35",
+        "number": 1.35
+      },
+      "leading-tight": {
+        "text": "1.2",
+        "number": 1.2
+      },
+      "link": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "mail-group-h": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "mail-list-w": {
+        "text": "20rem",
+        "px": 320
+      },
+      "mail-rail-gap": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "mail-rail-row": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "mail-row-bg": {
+        "text": "oklch(0 0 0)",
+        "color": [0, 0, 0, 1]
+      },
+      "mail-row-bg-hover": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 5%, oklch(0 0 0))",
+        "color": [0.00154296, 0.0015436, 0.00154366, 1]
+      },
+      "mail-row-bg-selected": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 13%, oklch(0 0 0))",
+        "color": [0.0243296, 0.0243397, 0.0243407, 1]
+      },
+      "mail-row-compact": {
+        "text": "2rem",
+        "px": 32
+      },
+      "mail-sender-w": {
+        "text": "9rem",
+        "px": 144
+      },
+      "measure-reading": {
+        "text": "70ch",
+        "px": 560
+      },
+      "measure-thread": {
+        "text": "48rem",
+        "px": 768
+      },
+      "menu-fade": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "mono-active": {
+        "text": "oklch(0.88 0 0)",
+        "color": [0.844088, 0.844244, 0.844259, 1]
+      },
+      "mono-base": {
+        "text": "oklch(0.95 0 0)",
+        "color": [0.934359, 0.934529, 0.934546, 1]
+      },
+      "mono-hover": {
+        "text": "oklch(1.00 0 0)",
+        "color": [0.999871, 1.00005, 1.00007, 1]
+      },
+      "motion-base": {
+        "text": "0ms",
+        "ms": 0
+      },
+      "motion-fade": {
+        "text": "80ms",
+        "ms": 80
+      },
+      "motion-fast": {
+        "text": "0ms",
+        "ms": 0
+      },
+      "motion-grow": {
+        "text": "1",
+        "number": 1
+      },
+      "motion-instant": {
+        "text": "0ms",
+        "ms": 0
+      },
+      "motion-shift": {
+        "text": "0",
+        "px": 0,
+        "number": 0
+      },
+      "motion-slow": {
+        "text": "0ms",
+        "ms": 0
+      },
+      "motion-slower": {
+        "text": "0ms",
+        "ms": 0
+      },
+      "muted": {
+        "text": "oklch(0.18  0 0)",
+        "color": [0.0686772, 0.0686986, 0.0687006, 1]
+      },
+      "muted-foreground": {
+        "text": "oklch(0.72  0 0)",
+        "color": [0.644624, 0.644745, 0.644756, 1]
+      },
+      "neutral-100": {
+        "text": "oklch(0.965 0 0)",
+        "color": [0.953923, 0.954098, 0.954115, 1]
+      },
+      "neutral-200": {
+        "text": "oklch(0.92  0 0)",
+        "color": [0.89546, 0.895625, 0.89564, 1]
+      },
+      "neutral-300": {
+        "text": "oklch(0.85  0 0)",
+        "color": [0.80594, 0.806089, 0.806103, 1]
+      },
+      "neutral-400": {
+        "text": "oklch(0.72  0 0)",
+        "color": [0.644624, 0.644745, 0.644756, 1]
+      },
+      "neutral-50": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "neutral-500": {
+        "text": "oklch(0.58  0 0)",
+        "color": [0.47893, 0.479022, 0.479031, 1]
+      },
+      "neutral-600": {
+        "text": "oklch(0.45  0 0)",
+        "color": [0.33379, 0.333857, 0.333863, 1]
+      },
+      "neutral-700": {
+        "text": "oklch(0.32  0 0)",
+        "color": [0.198885, 0.198929, 0.198933, 1]
+      },
+      "neutral-800": {
+        "text": "oklch(0.22  0 0)",
+        "color": [0.103938, 0.103965, 0.103968, 1]
+      },
+      "neutral-850": {
+        "text": "oklch(0.18  0 0)",
+        "color": [0.0686772, 0.0686986, 0.0687006, 1]
+      },
+      "neutral-900": {
+        "text": "oklch(0.14  0 0)",
+        "color": [0.035442, 0.0354568, 0.0354581, 1]
+      },
+      "neutral-950": {
+        "text": "oklch(0.10  0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "neutral-975": {
+        "text": "oklch(0.07  0 0)",
+        "color": [0.00443026, 0.00443209, 0.00443227, 1]
+      },
+      "notes-meta-line-space": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "pad-x": {
+        "text": "1rem",
+        "px": 16
+      },
+      "pad-x-sm": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "pad-y": {
+        "text": "0.625rem",
+        "px": 10
+      },
+      "pad-y-sm": {
+        "text": "0.375rem",
+        "px": 6
+      },
+      "panel-gap": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "panel-inset": {
+        "text": "1rem",
+        "px": 16
+      },
+      "panel-pad": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "panel-strip-w": {
+        "text": "2.5rem",
+        "px": 40
+      },
+      "panel-title-top": {
+        "text": "calc(0.5rem + (2.25rem - 1.75rem) / 2)",
+        "px": 12
+      },
+      "pink-active": {
+        "text": "oklch(0.66 0.20 350)",
+        "color": [0.902108, 0.319679, 0.639826, 1]
+      },
+      "pink-base": {
+        "text": "oklch(0.71 0.20 350)",
+        "color": [0.972199, 0.385108, 0.701259, 1]
+      },
+      "pink-hover": {
+        "text": "oklch(0.76 0.20 350)",
+        "color": [1.04283, 0.449719, 0.763676, 1]
+      },
+      "popover": {
+        "text": "oklch(0.18  0 0)",
+        "color": [0.0686772, 0.0686986, 0.0687006, 1]
+      },
+      "popover-foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "presence-reachable": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "primary": {
+        "text": "oklch(0.95 0 0)",
+        "color": [0.934359, 0.934529, 0.934546, 1]
+      },
+      "primary-active": {
+        "text": "oklch(0.88 0 0)",
+        "color": [0.844088, 0.844244, 0.844259, 1]
+      },
+      "primary-foreground": {
+        "text": "oklch(0.10 0 0)",
+        "color": [0.0129162, 0.0129216, 0.0129221, 1]
+      },
+      "primary-hover": {
+        "text": "oklch(1.00 0 0)",
+        "color": [0.999871, 1.00005, 1.00007, 1]
+      },
+      "radius": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "radius-full": {
+        "text": "9999px",
+        "px": 9999
+      },
+      "radius-lg": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "radius-md": {
+        "text": "0.5rem",
+        "px": 8
+      },
+      "radius-sm": {
+        "text": "0.25rem",
+        "px": 4
+      },
+      "radius-xl": {
+        "text": "1rem",
+        "px": 16
+      },
+      "red-active": {
+        "text": "oklch(0.60 0.22 25)",
+        "color": [0.902936, 0.167951, 0.205093, 1]
+      },
+      "red-base": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "red-hover": {
+        "text": "oklch(0.72 0.22 25)",
+        "color": [1.07723, 0.356321, 0.349826, 1]
+      },
+      "ring": {
+        "text": "oklch(0.95 0 0)",
+        "color": [0.934359, 0.934529, 0.934546, 1]
+      },
+      "row-first-line-pad": {
+        "text": "calc((1.625rem - 1lh) / 2)",
+        "px": 4
+      },
+      "row-h": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "row-h-sm": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "scrim": {
+        "text": "color-mix(in oklab, oklch(0 0 0) 82%, transparent)",
+        "color": [0, 0, 0, 0.82]
+      },
+      "scroll-thumb": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 16%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.16]
+      },
+      "scroll-thumb-hover": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 32%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.32]
+      },
+      "search-match-bg": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 32%, transparent)",
+        "color": [0.934359, 0.934529, 0.934546, 0.32]
+      },
+      "secondary": {
+        "text": "oklch(0.22  0 0)",
+        "color": [0.103938, 0.103965, 0.103968, 1]
+      },
+      "secondary-foreground": {
+        "text": "oklch(0.985 0 0)",
+        "color": [0.980129, 0.980308, 0.980325, 1]
+      },
+      "selected-bg": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 14%, oklch(0.14  0 0))",
+        "color": [0.134652, 0.134685, 0.134688, 1]
+      },
+      "selected-border": {
+        "text": "oklch(0.95 0 0)",
+        "color": [0.934359, 0.934529, 0.934546, 1]
+      },
+      "shadow-control-raised": {
+        "text": "0 0 0 0 transparent",
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px"
+      },
+      "shadow-lg": {
+        "text": "0 12px 32px rgb(0 0 0 / 0.55)",
+        "shadow": "rgba(0, 0, 0, 0.55) 0px 12px 32px 0px"
+      },
+      "shadow-md": {
+        "text": "0 4px 12px rgb(0 0 0 / 0.45)",
+        "shadow": "rgba(0, 0, 0, 0.45) 0px 4px 12px 0px"
+      },
+      "shadow-overlay": {
+        "text": "0 24px 64px rgb(0 0 0 / 0.65)",
+        "shadow": "rgba(0, 0, 0, 0.65) 0px 24px 64px 0px"
+      },
+      "shadow-sm": {
+        "text": "0 1px 2px rgb(0 0 0 / 0.35)",
+        "shadow": "rgba(0, 0, 0, 0.35) 0px 1px 2px 0px"
+      },
+      "shadow-xs": {
+        "text": "0 1px 0 rgb(0 0 0 / 0.30)",
+        "shadow": "rgba(0, 0, 0, 0.3) 0px 1px 0px 0px"
+      },
+      "state-active": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 9%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.09]
+      },
+      "state-active-hover": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 14%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.14]
+      },
+      "state-hover": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 5%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.05]
+      },
+      "state-selected": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 13%, transparent)",
+        "color": [0.934359, 0.934529, 0.934546, 0.13]
+      },
+      "state-selected-edge": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 32%, transparent)",
+        "color": [0.934359, 0.934529, 0.934546, 0.32]
+      },
+      "state-selected-hover": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 18%, transparent)",
+        "color": [0.934359, 0.934529, 0.934546, 0.18]
+      },
+      "state-selected-ring": {
+        "text": "color-mix(in oklab, oklch(0.95 0 0) 32%, transparent)",
+        "color": [0.934359, 0.934529, 0.934546, 0.32]
+      },
+      "status-danger": {
+        "text": "oklch(0.66 0.22 25)",
+        "color": [0.989777, 0.268537, 0.27788, 1]
+      },
+      "status-info": {
+        "text": "oklch(0.70 0.14 230)",
+        "color": [-0.0153564, 0.678468, 0.89443, 1]
+      },
+      "status-success": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "status-warning": {
+        "text": "oklch(0.82 0.15 75)",
+        "color": [0.988912, 0.707733, 0.257336, 1]
+      },
+      "stream-fade-bottom": {
+        "text": "1.25rem",
+        "px": 20
+      },
+      "stream-fade-top": {
+        "text": "1.75rem",
+        "px": 28
+      },
+      "subtle-foreground": {
+        "text": "color-mix(in oklab, oklch(0.72  0 0) 86%, transparent)",
+        "color": [0.644624, 0.644745, 0.644756, 0.86]
+      },
+      "success": {
+        "text": "oklch(0.74 0.16 145)",
+        "color": [0.381548, 0.770857, 0.406845, 1]
+      },
+      "success-foreground": {
+        "text": "oklch(0.12 0 0)",
+        "color": [0.0223192, 0.0223284, 0.0223293, 1]
+      },
+      "tag-chip-surface": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 7%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.07]
+      },
+      "teal-active": {
+        "text": "oklch(0.66 0.13 200)",
+        "color": [-0.22677, 0.662694, 0.695718, 1]
+      },
+      "teal-base": {
+        "text": "oklch(0.72 0.13 200)",
+        "color": [-0.158331, 0.738114, 0.770725, 1]
+      },
+      "teal-hover": {
+        "text": "oklch(0.77 0.13 200)",
+        "color": [0.0365027, 0.801938, 0.834257, 1]
+      },
+      "text-2xl": {
+        "text": "1.5rem",
+        "px": 24
+      },
+      "text-2xs": {
+        "text": "0.6875rem",
+        "px": 11
+      },
+      "text-3xl": {
+        "text": "1.875rem",
+        "px": 30
+      },
+      "text-3xs": {
+        "text": "0.5625rem",
+        "px": 9
+      },
+      "text-4xl": {
+        "text": "2.25rem",
+        "px": 36
+      },
+      "text-5xl": {
+        "text": "3rem",
+        "px": 48
+      },
+      "text-base": {
+        "text": "0.875rem",
+        "px": 14
+      },
+      "text-lg": {
+        "text": "1.125rem",
+        "px": 18
+      },
+      "text-md": {
+        "text": "0.9375rem",
+        "px": 15
+      },
+      "text-selection": {
+        "text": "color-mix(in oklch, oklch(0.70 0.14 230) 38%, transparent)",
+        "color": [-0.0153564, 0.678468, 0.89443, 0.38]
+      },
+      "text-sm": {
+        "text": "0.8125rem",
+        "px": 13
+      },
+      "text-xl": {
+        "text": "1.25rem",
+        "px": 20
+      },
+      "text-xs": {
+        "text": "0.75rem",
+        "px": 12
+      },
+      "timeline-band": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 3.2%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.032]
+      },
+      "timeline-bar": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 9%, oklch(0.14  0 0))",
+        "color": [0.100379, 0.100406, 0.100408, 1]
+      },
+      "timeline-grid": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 5.5%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.055]
+      },
+      "timeline-grid-strong": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 13%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.13]
+      },
+      "timeline-late": {
+        "text": "color-mix(in oklab, oklch(0.72  0 0) 46%, oklch(0.14  0 0))",
+        "color": [0.287709, 0.287768, 0.287774, 1]
+      },
+      "timeline-outline": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 24%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.24]
+      },
+      "timeline-progress": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 52%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.52]
+      },
+      "timeline-segment": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 16%, oklch(0.14  0 0))",
+        "color": [0.155261, 0.155298, 0.155301, 1]
+      },
+      "timeline-weekend": {
+        "text": "color-mix(in oklab, oklch(0.985 0 0) 2.4%, transparent)",
+        "color": [0.980129, 0.980308, 0.980325, 0.024]
+      },
+      "tracking-normal": {
+        "text": "0",
+        "px": 0,
+        "number": 0
+      },
+      "tracking-tight": {
+        "text": "-0.015em",
+        "px": -0.24
+      },
+      "tracking-wide": {
+        "text": "0.04em",
+        "px": 0.64
+      },
+      "tree-indent": {
+        "text": "0.875rem",
+        "px": 14
+      },
+      "violet-active": {
+        "text": "oklch(0.60 0.20 295)",
+        "color": [0.549227, 0.368974, 0.911061, 1]
+      },
+      "violet-base": {
+        "text": "oklch(0.66 0.20 295)",
+        "color": [0.618675, 0.444413, 0.992972, 1]
+      },
+      "violet-hover": {
+        "text": "oklch(0.72 0.20 295)",
+        "color": [0.689938, 0.520015, 1.07583, 1]
+      },
+      "warning": {
+        "text": "oklch(0.82 0.15 75)",
+        "color": [0.988912, 0.707733, 0.257336, 1]
+      },
+      "warning-foreground": {
+        "text": "oklch(0.12 0 0)",
+        "color": [0.0223192, 0.0223284, 0.0223293, 1]
+      },
+      "width-content-max": {
+        "text": "65rem",
+        "px": 1040
+      },
+      "width-prose-max": {
+        "text": "36rem",
+        "px": 576
+      },
+      "width-rail": {
+        "text": "20rem",
+        "px": 320
+      },
+      "width-sidebar": {
+        "text": "16rem",
+        "px": 256
+      },
+      "z-base": {
+        "text": "0",
+        "px": 0,
+        "number": 0
+      },
+      "z-debug": {
+        "text": "100",
+        "number": 100
+      },
+      "z-dialog": {
+        "text": "60",
+        "number": 60
+      },
+      "z-dropdown": {
+        "text": "70",
+        "number": 70
+      },
+      "z-header": {
+        "text": "30",
+        "number": 30
+      },
+      "z-overlay": {
+        "text": "50",
+        "number": 50
+      },
+      "z-popover": {
+        "text": "70",
+        "number": 70
+      },
+      "z-rail": {
+        "text": "20",
+        "number": 20
+      },
+      "z-sticky": {
+        "text": "10",
+        "number": 10
+      },
+      "z-toast": {
+        "text": "90",
+        "number": 90
+      },
+      "z-tooltip": {
+        "text": "80",
+        "number": 80
+      }
+    }
+  }
+}
