@@ -44,6 +44,7 @@ const TIER2_FIXTURES = [
   "apps/native/crates/auth/src/session.rs",
   "apps/native/crates/config/src/lib.rs",
   "apps/native/Cargo.toml",
+  "apps/native/Cargo.lock",
 ];
 
 describe("paths → tier", () => {
