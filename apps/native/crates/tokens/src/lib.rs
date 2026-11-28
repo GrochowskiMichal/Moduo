@@ -120,13 +120,30 @@ impl Tokens {
                 decls.insert(name.as_str(), expr);
             }
         }
+        let ems = self
+            .names()
+            .filter_map(|n| em_of(&decls, n).map(|em| (n.to_owned(), em)))
+            .collect();
         let mut evaluator = Evaluator::new(decls);
         let values = self
             .names()
             .map(|n| (n.to_owned(), evaluator.token(n)))
             .collect();
-        Resolved { values }
+        Resolved { values, ems }
     }
+}
+
+/// A token that comes down to a plain `<n>em` (through `var()`), such as the tracking tokens.
+fn em_of(decls: &HashMap<&str, &export::Expr>, name: &str) -> Option<f32> {
+    let mut expr = *decls.get(name)?;
+    for _ in 0..decls.len() {
+        match expr {
+            export::Expr::Num { num, unit } if unit == "em" => return Some(*num),
+            export::Expr::Var { var, .. } => expr = decls.get(var.as_str())?,
+            _ => return None,
+        }
+    }
+    None
 }
 
 /// `motion` also decides the reduced-motion media layer (`:root:not([data-motion="full"])`).
@@ -155,6 +172,7 @@ fn applies(layer: &Layer, appearance: &Appearance) -> bool {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Resolved {
     values: HashMap<String, Value>,
+    ems: HashMap<String, f32>,
 }
 
 impl Resolved {
@@ -177,6 +195,11 @@ impl Resolved {
             Value::Number(n) if *n == 0.0 => Some(0.0),
             _ => None,
         }
+    }
+
+    /// A length in em (letter spacing): the caller multiplies by its own font size.
+    pub fn em(&self, name: impl TokenName) -> Option<f32> {
+        self.ems.get(name.token_name()).copied()
     }
 
     /// A duration in milliseconds.

@@ -4307,6 +4307,8 @@ name = "moduo-ui"
 version = "0.0.0"
 dependencies = [
  "gpui-kit",
+ "moduo-tokens",
+ "ttf-parser",
 ]
 
 [[package]]
