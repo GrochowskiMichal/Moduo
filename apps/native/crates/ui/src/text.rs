@@ -1,7 +1,18 @@
 //! Type roles (`docs/DESIGN_RULES.md` R4, R9): what a piece of text is decides its face, size,
 //! weight and leading, all from tokens. One font axis moves every role together.
 
+use gpui_kit::{prelude::*, relative, App, FontWeight};
 use moduo_tokens::{Resolved, Token};
+
+/// Draws an element's text in a role: face, size, weight, leading and tracking from tokens.
+pub fn styled<E: Styled>(element: E, role: TextRole, cx: &App) -> E {
+    let s = role.style(crate::theme::tokens(cx));
+    element
+        .font_family(s.face)
+        .text_size(gpui_kit::px(s.size))
+        .font_weight(FontWeight(s.weight))
+        .line_height(relative(s.line_height))
+}
 
 /// What a piece of text is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

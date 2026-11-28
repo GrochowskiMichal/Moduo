@@ -1,0 +1,17 @@
+[package]
+name = "moduo-gallery"
+description = "Every primitive, every variant and state, at three densities: the native app's Storybook."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+default-run = "moduo-gallery"
+
+[lints]
+workspace = true
+
+[dependencies]
+moduo-tokens = { path = "../tokens" }
+moduo-ui = { workspace = true }
+
+[dev-dependencies]
+moduo-ui = { workspace = true, features = ["test-support"] }

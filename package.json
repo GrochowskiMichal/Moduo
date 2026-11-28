@@ -22,6 +22,7 @@
     "native:tokens": "bun scripts/native/export-tokens.ts",
     "native:icons": "bun scripts/native/export-icons.ts",
     "native:golden": "bun scripts/native/tokens-golden.ts",
+    "native:gallery": "cd apps/native && cargo run -p moduo-gallery",
     "native:check": "cd apps/native && cargo fmt --all --check && cargo clippy --locked --all-targets -- -D warnings && cargo test --locked",
     "build:web": "bun run --cwd apps/app build",
     "build:desktop:web": "bun run --cwd apps/app build:desktop",

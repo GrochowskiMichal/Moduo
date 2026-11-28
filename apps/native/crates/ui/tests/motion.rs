@@ -15,15 +15,24 @@ fn reduced_motion_turns_movement_into_a_fade() {
 
     // A popover grows from 0.96 over --motion-base and fades in over --motion-fade (global.css).
     let pop = spec(Pattern::Pop, &full);
-    assert_eq!((pop.movement, pop.fade, pop.scale_from), (ms(180), ms(100), 0.96));
+    assert_eq!(
+        (pop.movement, pop.fade, pop.scale_from),
+        (ms(180), ms(100), 0.96)
+    );
     let pop = spec(Pattern::Pop, &reduced);
-    assert_eq!((pop.movement, pop.fade, pop.scale_from, pop.shift_from), (ms(0), ms(80), 1.0, 0.0));
+    assert_eq!(
+        (pop.movement, pop.fade, pop.scale_from, pop.shift_from),
+        (ms(0), ms(80), 1.0, 0.0)
+    );
 
     // A panel slides --motion-shift over --motion-slow; reduced, it only fades.
     let panel = spec(Pattern::Panel, &full);
     assert_eq!((panel.movement, panel.shift_from), (ms(280), 8.0));
     let panel = spec(Pattern::Panel, &reduced);
-    assert_eq!((panel.movement, panel.shift_from, panel.fade), (ms(0), 0.0, ms(80)));
+    assert_eq!(
+        (panel.movement, panel.shift_from, panel.fade),
+        (ms(0), 0.0, ms(80))
+    );
 
     // A view switch is all opacity: --motion-slow, or the short fade when reduced.
     assert_eq!(spec(Pattern::View, &full).fade, ms(280));

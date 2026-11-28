@@ -5,18 +5,20 @@ use moduo_ui::gpui::{
     self, div, prelude::*, px, size, AnyWindowHandle, App, Bounds, Context, Pixels, Size,
     TitlebarOptions, Window, WindowBounds, WindowOptions,
 };
+use moduo_ui::theme;
+use moduo_ui::tokens::Token;
 
 /// The window title, and the app's name in the Dock.
 pub const TITLE: &str = "Moduo";
 
 /// The size the window opens at (the Tauri app's, `tauri.conf.json`).
 pub fn default_size() -> Size<Pixels> {
-    size(px(1280.), px(840.))
+    size(px(1280.), px(840.)) // design-literal: the window size, as the Tauri app's (tauri.conf.json)
 }
 
 /// Layouts are designed down to this size and no further.
 pub fn min_size() -> Size<Pixels> {
-    size(px(1024.), px(700.))
+    size(px(1024.), px(700.)) // design-literal: the smallest window layouts are designed for
 }
 
 /// "Moduo", and where it is when that is the cloud: changes there are real.
@@ -81,11 +83,11 @@ impl Render for Shell {
             .children(cloud.then(|| {
                 div()
                     .w_full()
-                    .px_4()
-                    .py_0p5()
+                    .px(theme::px(cx, Token::PadX))
+                    .py(theme::px(cx, Token::PadYSm))
                     .bg(alert)
                     .text_color(alert_text)
-                    .text_xs()
+                    .text_size(theme::px(cx, Token::TextXs))
                     .child("Cloud backend: every change here is a real change to production data.")
             }))
     }

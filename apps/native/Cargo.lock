@@ -4309,6 +4309,14 @@ name = "moduo-config"
 version = "0.0.0"
 
 [[package]]
+name = "moduo-gallery"
+version = "0.0.0"
+dependencies = [
+ "moduo-tokens",
+ "moduo-ui",
+]
+
+[[package]]
 name = "moduo-native-checks"
 version = "0.0.0"
 

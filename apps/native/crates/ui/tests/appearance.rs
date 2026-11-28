@@ -25,9 +25,16 @@ fn a_density_switch_re_lays_every_primitive(cx: &mut TestAppContext) {
     cx.run_until_parked();
     let dense = cx.debug_bounds("probe").expect("probe drawn").size.height;
 
-    assert_eq!(f32::from(comfortable), 36.0);
-    assert!(dense < comfortable, "dense {dense:?} is not smaller than {comfortable:?}");
-    assert_eq!(cx.update(|_, cx| theme::appearance(cx).attr("density").map(str::to_owned)), Some("dense".into()));
+    // --ctrl-h is 2rem at comfortable (tokens.css).
+    assert_eq!(f32::from(comfortable), 32.0);
+    assert!(
+        dense < comfortable,
+        "dense {dense:?} is not smaller than {comfortable:?}"
+    );
+    assert_eq!(
+        cx.update(|_, cx| theme::appearance(cx).attr("density").map(str::to_owned)),
+        Some("dense".into())
+    );
 }
 
 #[gpui::test]

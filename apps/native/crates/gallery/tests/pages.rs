@@ -10,6 +10,9 @@ fn every_page_renders(cx: &mut TestAppContext) {
     for (index, name) in names.iter().enumerate() {
         gallery.update(cx, |g, cx| g.select(index, cx));
         cx.run_until_parked();
-        assert!(cx.debug_bounds("gallery-page").is_some(), "{name} drew nothing");
+        assert!(
+            cx.debug_bounds("gallery-page").is_some(),
+            "{name} drew nothing"
+        );
     }
 }

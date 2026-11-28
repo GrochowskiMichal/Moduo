@@ -101,34 +101,87 @@ fn is_literal_call(line: &str, pattern: &str) -> bool {
 /// `.px_4()`, `.gap_2()`, `.text_xs()`: the style shorthands, fixed sizes in disguise.
 fn is_shorthand(line: &str) -> bool {
     let shorthands = [
-        ".p_", ".px_", ".py_", ".pt_", ".pb_", ".pl_", ".pr_", ".m_", ".mx_", ".my_", ".mt_", ".mb_",
-        ".ml_", ".mr_", ".gap_", ".gap_x_", ".gap_y_", ".w_", ".h_", ".size_", ".rounded_", ".shadow_",
+        ".p_",
+        ".px_",
+        ".py_",
+        ".pt_",
+        ".pb_",
+        ".pl_",
+        ".pr_",
+        ".m_",
+        ".mx_",
+        ".my_",
+        ".mt_",
+        ".mb_",
+        ".ml_",
+        ".mr_",
+        ".gap_",
+        ".gap_x_",
+        ".gap_y_",
+        ".w_",
+        ".h_",
+        ".size_",
+        ".rounded_",
+        ".shadow_",
     ];
     let sized = shorthands.iter().any(|s| {
-        line.match_indices(s).any(|(i, _)| line[i + s.len()..].chars().next().is_some_and(|c| c.is_ascii_digit()))
+        line.match_indices(s).any(|(i, _)| {
+            line[i + s.len()..]
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_digit())
+        })
     });
-    let text = ["text_xs()", "text_sm()", "text_base()", "text_lg()", "text_xl()", "text_2xl()"].iter().any(|t| line.contains(t));
-    let corners = ["rounded_sm()", "rounded_md()", "rounded_lg()", "rounded_xl()"].iter().any(|t| line.contains(t));
+    let text = [
+        "text_xs()",
+        "text_sm()",
+        "text_base()",
+        "text_lg()",
+        "text_xl()",
+        "text_2xl()",
+    ]
+    .iter()
+    .any(|t| line.contains(t));
+    let corners = [
+        "rounded_sm()",
+        "rounded_md()",
+        "rounded_lg()",
+        "rounded_xl()",
+    ]
+    .iter()
+    .any(|t| line.contains(t));
     sized || text || corners
 }
 
 #[test]
 fn no_design_literals_outside_moduo_tokens() {
     let mut offenders = Vec::new();
-    for entry in fs::read_dir(crates_dir()).expect("apps/native/crates").flatten() {
+    for entry in fs::read_dir(crates_dir())
+        .expect("apps/native/crates")
+        .flatten()
+    {
         let path = entry.path();
         if !path.is_dir() || path.file_name().is_some_and(|n| n == "tokens") {
             continue;
         }
         let mut files = Vec::new();
         files_under(&path.join("src"), &mut files);
-        for file in files.iter().filter(|f| f.extension().is_some_and(|e| e == "rs")) {
+        for file in files
+            .iter()
+            .filter(|f| f.extension().is_some_and(|e| e == "rs"))
+        {
             let text = fs::read_to_string(file).expect("a readable source file");
             for (number, line) in text.lines().enumerate() {
                 let code = line.split("//").next().unwrap_or_default();
-                let literal = LITERALS.iter().any(|p| is_literal_call(code, p)) || is_shorthand(code);
+                let literal =
+                    LITERALS.iter().any(|p| is_literal_call(code, p)) || is_shorthand(code);
                 if literal && !line.contains(ALLOW) {
-                    offenders.push(format!("{}:{}: {}", file.display(), number + 1, line.trim()));
+                    offenders.push(format!(
+                        "{}:{}: {}",
+                        file.display(),
+                        number + 1,
+                        line.trim()
+                    ));
                 }
             }
         }
@@ -145,7 +198,10 @@ fn the_literal_check_bites() {
     assert!(is_literal_call("div().w(px(12.))", "px("));
     assert!(is_literal_call("let c = rgba(0x000000ff);", "rgba("));
     assert!(!is_literal_call("div().w(px(size))", "px("));
-    assert!(!is_literal_call("div().px(theme::px(cx, Token::PadX))", "px("));
+    assert!(!is_literal_call(
+        "div().px(theme::px(cx, Token::PadX))",
+        "px("
+    ));
     assert!(is_shorthand("div().px_4().py_0p5()"));
     assert!(is_shorthand("div().text_xs()"));
     assert!(!is_shorthand("div().size_full().w_full()"));

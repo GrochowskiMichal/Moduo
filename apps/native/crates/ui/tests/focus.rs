@@ -1,5 +1,7 @@
 use moduo_ui::focus;
-use moduo_ui::gpui::{self, div, point, prelude::*, px, Context, FocusHandle, Modifiers, TestAppContext, Window};
+use moduo_ui::gpui::{
+    self, div, point, prelude::*, px, Context, FocusHandle, Modifiers, TestAppContext, Window,
+};
 
 struct Field {
     handle: FocusHandle,
@@ -19,7 +21,9 @@ impl Render for Field {
 #[gpui::test]
 fn the_ring_shows_on_tab_not_on_click(cx: &mut TestAppContext) {
     cx.update(moduo_ui::init);
-    let (view, cx) = cx.add_window_view(|_, cx| Field { handle: cx.focus_handle() });
+    let (view, cx) = cx.add_window_view(|_, cx| Field {
+        handle: cx.focus_handle(),
+    });
 
     // Focus arrives from the keyboard: the ring shows.
     cx.update(|window, cx| view.read(cx).handle.clone().focus(window, cx));
