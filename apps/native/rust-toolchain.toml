@@ -1,0 +1,5 @@
+# The desktop crate's pin (apps/desktop/src-tauri/rust-toolchain.toml).
+[toolchain]
+channel = "nightly-2026-10-06"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

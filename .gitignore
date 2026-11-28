@@ -50,6 +50,9 @@ apps/desktop/src-tauri/*.sqlite3
 apps/desktop/src-tauri/*.redb
 apps/desktop/src-tauri/*.redb.lock
 
+# the native (GPUI) app's build output
+apps/native/target/
+
 # Supabase CLI per-machine state (update-check cache, `supabase link` output) — see docs/gotchas/supabase.md
 supabase/.temp/
 

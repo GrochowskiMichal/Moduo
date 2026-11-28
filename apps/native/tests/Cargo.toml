@@ -1,0 +1,13 @@
+[package]
+name = "moduo-native-checks"
+description = "Rules about the workspace itself, checked as tests."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[[test]]
+name = "boundaries"
+path = "boundaries.rs"

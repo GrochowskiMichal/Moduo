@@ -1,0 +1,16 @@
+[package]
+name = "moduo-app"
+description = "The native Moduo desktop app."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+default-run = "moduo-app"
+
+[lints]
+workspace = true
+
+[dependencies]
+moduo-ui = { workspace = true }
+
+[dev-dependencies]
+moduo-ui = { workspace = true, features = ["test-support"] }

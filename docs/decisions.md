@@ -117,6 +117,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Desktop app, Tauri, releases → [decisions/desktop-release.md](decisions/desktop-release.md)
 
+- 2026-11-28 · A native macOS app on GPUI lives in `apps/native`, beside the Tauri app, and replaces it module by module.
 - 2026-11-02 · The Calendar sign-in clients are baked into desktop release builds.
 - 2026-10-20 · The desktop shell is trimmed: 33 dead commands gone, `opt-level = "s"`, the window starts hidden, macOS 14 is the floor, and IMAP/SMTP stay on native-tls for now.
 - 2026-10-19 · Release builds use `lto = true`, `codegen-units = 1` and `strip = true`.
@@ -138,6 +139,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Toolchain and libraries → [decisions/toolchain.md](decisions/toolchain.md)
 
+- 2026-11-28 · GPUI comes from crates.io, exactly pinned (`gpui-kit = "=0.11.0"` on its `gpui-pre` snapshot), and stays behind one crate, `moduo-ui`.
 - 2026-11-26 · The `scripts/` and `tools/ast-grep` tests run on `bun test`, not Rstest; the app, backend and infra suites stay on Rstest.
 - 2026-10-22 · Biome is gone: `bun lint` (a pinned canary) lints, `bun fmt` formats.
 - 2026-10-22 · Bun 1.4.4: `bun check` type-checks, `bun fmt` formats, Biome only lints (MOD-517). *(partly superseded)*

@@ -1,0 +1,23 @@
+# The native Moduo desktop app (GPUI). Its own workspace: nothing here is part of
+# the Bun workspaces or of the Tauri crate in apps/desktop. Gate: `bun run native:check`.
+[workspace]
+resolver = "2"
+members = ["crates/*", "tests"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace.dependencies]
+# Exactly pinned: the kit and the GPUI snapshot under it change every week
+# (docs/decisions/toolchain.md, 2026-11-28). Bump in a block of its own.
+gpui-kit = "=0.11.0"
+moduo-ui = { path = "crates/ui" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
