@@ -14,15 +14,19 @@ pub enum TextRole {
     Eyebrow,
     /// Code only (`font-mono text-sm`).
     Mono,
-    /// Page headings (`detail-title.tsx` page: `text-2xl`, display face).
+    /// Page headings (`time-report-sheet.tsx`, `view-export-menu.tsx`: `font-display text-2xl
+    /// font-semibold`).
     Heading,
 }
 
 /// A role's text, resolved.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextStyle {
-    /// The first family of the stack; GPUI falls back to the system face when it is not bundled.
+    /// The first family of the token's stack, as the web app names it.
     pub family: String,
+    /// The face to draw with: the first family in the stack the app bundles, else Geist, so a
+    /// font choice the app can't draw yet falls back to the default (specs/native-foundation.md).
+    pub face: String,
     /// Pixels.
     pub size: f32,
     pub weight: f32,
@@ -33,6 +37,9 @@ pub struct TextStyle {
     pub uppercase: bool,
 }
 
+// Line heights: the web app keeps Tailwind's per-size companions (text-base 1.5, text-sm 1.43,
+// text-2xl 1.33; an eyebrow inherits its parent's). The nearest leading tokens stand in: normal for
+// base and inherited, normal for mono (1.5 against 1.43), snug for headings (1.35 against 1.33).
 impl TextRole {
     pub fn style(self, t: &Resolved) -> TextStyle {
         let (family, size, weight, leading, tracking, uppercase) = match self {
@@ -48,7 +55,7 @@ impl TextRole {
                 Token::FontDisplay,
                 Token::TextBase,
                 Token::FontWeightMedium,
-                Token::LeadingSnug,
+                Token::LeadingNormal,
                 None,
                 false,
             ),
@@ -56,7 +63,7 @@ impl TextRole {
                 Token::FontBody,
                 Token::Text2xs,
                 Token::FontWeightMedium,
-                Token::LeadingTight,
+                Token::LeadingNormal,
                 Some(Token::TrackingWide),
                 true,
             ),
@@ -72,18 +79,22 @@ impl TextRole {
                 Token::FontDisplay,
                 Token::Text2xl,
                 Token::FontWeightSemibold,
-                Token::LeadingTight,
-                Some(Token::TrackingTight),
+                Token::LeadingSnug,
+                None,
                 false,
             ),
         };
         // Every token named here exists (`Token` is generated from them); a missing value reads 0.
         let size = t.px(size).unwrap_or_default();
+        let stack = t.fonts(family).unwrap_or_default();
+        let bundled = crate::fonts::FAMILIES;
         TextStyle {
-            family: t
-                .fonts(family)
-                .and_then(|f| f.first().map(|s| s.to_string()))
-                .unwrap_or_default(),
+            family: stack.first().map(|s| s.to_string()).unwrap_or_default(),
+            face: stack
+                .iter()
+                .find(|f| bundled.contains(f))
+                .unwrap_or(&bundled[0])
+                .to_string(),
             size,
             weight: t.number(weight).unwrap_or_default(),
             line_height: t.number(leading).unwrap_or_default(),

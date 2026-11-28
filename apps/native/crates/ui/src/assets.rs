@@ -31,7 +31,11 @@ impl AssetSource for Assets {
             .filter(|(p, _)| p.starts_with(path))
             .map(|(p, _)| SharedString::from(*p))
             .collect();
-        out.extend(gpui_kit::assets::Assets.list(path)?);
+        for kit in gpui_kit::assets::Assets.list(path)? {
+            if !out.contains(&kit) {
+                out.push(kit);
+            }
+        }
         Ok(out)
     }
 }

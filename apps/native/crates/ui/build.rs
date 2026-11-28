@@ -44,7 +44,7 @@ fn main() {
 
     let icons = svgs(&assets.join("icons"));
     let mut out = String::from(
-        "/// Every icon the app draws: lucide's, by lucide's name in CamelCase, plus Moduo's own.\n\
+        "/// Every icon the app draws: lucide's, named as the app imports them, plus Moduo's own.\n\
          #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]\npub enum IconName {\n",
     );
     for f in &icons {

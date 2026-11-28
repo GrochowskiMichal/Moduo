@@ -16,6 +16,9 @@ macro_rules! face {
     };
 }
 
+/// The families the faces belong to, the default first.
+pub const FAMILIES: [&str; 2] = ["Geist", "Geist Mono"];
+
 /// Every bundled face, by file name.
 pub static FACES: &[(&str, &[u8])] = &[
     face!("Geist-Regular"),

@@ -74,6 +74,13 @@ export function importedIcons(): string[] {
   return [...names].sort();
 }
 
+export const LICENSE_PATH = `${ICONS_DIR}/LICENSE`;
+
+/** lucide's licence, as the package ships it. */
+export function lucideLicense(): string {
+  return readFileSync(join(root, "node_modules/lucide-react/LICENSE"), "utf8");
+}
+
 /** The files to write, by path relative to the repo root. */
 export function exportIcons(): Map<string, string> {
   const files = new Map<string, string>();
@@ -122,7 +129,15 @@ if (import.meta.main) {
   const next = exportIcons();
   if (process.argv.includes("--check")) {
     const now = committedIcons();
-    const same = now.size === next.size && [...next].every(([p, svg]) => now.get(p) === svg);
+    const license = (() => {
+      try {
+        return readFileSync(join(root, LICENSE_PATH), "utf8") === lucideLicense();
+      } catch {
+        return false;
+      }
+    })();
+    const same =
+      license && now.size === next.size && [...next].every(([p, svg]) => now.get(p) === svg);
     if (!same) {
       console.error(`${ICONS_DIR} is stale: run bun run native:icons`);
       process.exit(1);
@@ -133,6 +148,8 @@ if (import.meta.main) {
       mkdirSync(join(root, dir), { recursive: true });
     }
     for (const [path, svg] of next) writeFileSync(join(root, path), svg);
+    // lucide is ISC (and Feather's MIT for its older icons): the notice travels with the copies.
+    writeFileSync(join(root, LICENSE_PATH), lucideLicense());
     console.log(`wrote ${next.size} files`);
   }
 }
