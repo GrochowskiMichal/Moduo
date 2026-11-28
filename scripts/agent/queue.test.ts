@@ -62,6 +62,23 @@ describe("parseExecutionBlocks", () => {
   });
 });
 
+describe("depsOf (via parseExecutionBlocks)", () => {
+  const md = (cell: string) =>
+    `## Execution blocks\n\n| # | Block | Depends on |\n| --- | --- | --- |\n| ZZ-1 | A | — |\n| ZZ-2 | B | — |\n| ZZ-3 | C | ${cell} |\n`;
+
+  it("reads short row refs joined by commas, plus signs and 'and'", () => {
+    expect(parseExecutionBlocks(md("1, 2"), "s.md")[2]?.deps).toEqual(["ZZ-1", "ZZ-2"]);
+    expect(parseExecutionBlocks(md("1 and 2"), "s.md")[2]?.deps).toEqual(["ZZ-1", "ZZ-2"]);
+    expect(parseExecutionBlocks(md("≥2 desktop releases"), "s.md")[2]?.deps).toEqual([]);
+  });
+
+  it("stays linear on a long run of digits that doesn't match (no catastrophic backtracking)", () => {
+    const started = performance.now();
+    parseExecutionBlocks(md(`${"1".repeat(5_000)}x`), "s.md");
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+});
+
 describe("blockIdOfTask", () => {
   it("takes '<ID> — ' at the start or '(<ID>)' at the end", () => {
     expect(blockIdOfTask("HV-8 — Moduo is the queue")).toBe("HV-8");

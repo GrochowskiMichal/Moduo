@@ -6,6 +6,8 @@ import { assertPublishable, writeNote } from "./numbers";
 import {
   addedEntries,
   buildMatches,
+  cell,
+  commandFor,
   COMMANDS,
   createBody,
   fileBug,
@@ -225,6 +227,22 @@ describe("prod watch", () => {
     expect(renderWatch(bad)).toMatch(/needs a look[\s\S]*checks · push · develop · failure/);
     const down = { ...facts, checks: [{ name: "x", ok: false, detail: "HTTP 503" }] };
     expect(watchStatus(down)).toBe("attention");
+  });
+});
+
+describe("routine CLI and table cells", () => {
+  it("escapes backslashes before pipes and keeps a detail on one row", () => {
+    expect(cell("a|b")).toBe("a\\|b");
+    // Escaping only the pipe would turn x\|y into x\\|y: an escaped backslash, then a bare pipe.
+    expect(cell("x\\|y")).toBe("x\\\\\\|y");
+    expect(cell("line one\n  line two")).toBe("line one line two");
+  });
+
+  it("dispatches only its own commands", () => {
+    expect(commandFor("watch")).toBe(COMMANDS.watch);
+    expect(commandFor("constructor")).toBeUndefined();
+    expect(commandFor("__proto__")).toBeUndefined();
+    expect(commandFor("toString")).toBeUndefined();
   });
 });
 
