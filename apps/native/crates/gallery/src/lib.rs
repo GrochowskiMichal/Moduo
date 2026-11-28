@@ -1,6 +1,7 @@
 //! The gallery: a window that lists pages down the left and draws the chosen one, under a strip
 //! that switches every appearance axis live. Each primitive block adds its page to [`pages`].
 
+mod controls_page;
 mod static_page;
 mod tokens_page;
 
@@ -24,6 +25,7 @@ pub fn pages() -> Vec<Box<dyn Page>> {
     vec![
         Box::new(tokens_page::TokensPage),
         Box::new(static_page::StaticPage),
+        Box::new(controls_page::ControlsPage),
     ]
 }
 
