@@ -85,42 +85,52 @@ for (const appearance of APPEARANCES) {
       register("--probe-time", "<time>", "-12345s");
       register("--probe-number", "<number>", "-12345");
       const p = document.getElementById("p")!;
-      const result: Record<string, Probe> = {};
-      for (const name of names) {
-        const text = getComputedStyle(html).getPropertyValue(`--${name}`).trim();
+      const read = (cs: CSSStyleDeclaration, prop: string) => cs.getPropertyValue(prop).trim();
+      // Each reader returns undefined when the probe fell back to its sentinel (not that kind).
+      const readers = {
+        color: (cs: CSSStyleDeclaration) => {
+          const m = /^color\(srgb ([-\d.e]+) ([-\d.e]+) ([-\d.e]+)(?: \/ ([-\d.e]+))?\)$/.exec(
+            read(cs, "--probe-color"),
+          );
+          return m ? [m[1], m[2], m[3], m[4] ?? "1"].map(Number) : undefined;
+        },
+        px: (cs: CSSStyleDeclaration) => {
+          const v = read(cs, "--probe-length");
+          return v !== "-12345px" && v.endsWith("px") ? Number(v.slice(0, -2)) : undefined;
+        },
+        ms: (cs: CSSStyleDeclaration) => {
+          const v = read(cs, "--probe-time");
+          if (v === "-12345s") return undefined;
+          return v.endsWith("ms") ? Number(v.slice(0, -2)) : Number(v.slice(0, -1)) * 1000;
+        },
+        number: (cs: CSSStyleDeclaration) => {
+          const v = read(cs, "--probe-number");
+          return v === "-12345" ? undefined : Number(v);
+        },
+        shadow: (cs: CSSStyleDeclaration) => {
+          const v = cs.boxShadow;
+          return v && v !== "none" && /\dpx/.test(v) ? v : undefined;
+        },
+      };
+      const probeOf = (name: string): Probe => {
         p.style.cssText = "";
         p.style.setProperty(
           "--probe-color",
           `color-mix(in srgb, var(--${name}) 100%, transparent)`,
         );
-        p.style.setProperty("--probe-length", `var(--${name})`);
-        p.style.setProperty("--probe-time", `var(--${name})`);
-        p.style.setProperty("--probe-number", `var(--${name})`);
-        p.style.setProperty("box-shadow", `var(--${name})`);
+        for (const prop of ["--probe-length", "--probe-time", "--probe-number", "box-shadow"]) {
+          p.style.setProperty(prop, `var(--${name})`);
+        }
         const cs = getComputedStyle(p);
-        const probe: Probe = { text };
-        const color = cs.getPropertyValue("--probe-color").trim();
-        const m = /^color\(srgb ([-\d.e]+) ([-\d.e]+) ([-\d.e]+)(?: \/ ([-\d.e]+))?\)$/.exec(color);
-        if (m)
-          probe.color = [
-            Number(m[1]),
-            Number(m[2]),
-            Number(m[3]),
-            m[4] === undefined ? 1 : Number(m[4]),
-          ];
-        const length = cs.getPropertyValue("--probe-length").trim();
-        if (length !== "-12345px" && length.endsWith("px")) probe.px = Number(length.slice(0, -2));
-        const time = cs.getPropertyValue("--probe-time").trim();
-        if (time !== "-12345s")
-          probe.ms = time.endsWith("ms")
-            ? Number(time.slice(0, -2))
-            : Number(time.slice(0, -1)) * 1000;
-        const number = cs.getPropertyValue("--probe-number").trim();
-        if (number !== "-12345") probe.number = Number(number);
-        const shadow = cs.boxShadow;
-        if (shadow && shadow !== "none" && /\dpx/.test(shadow)) probe.shadow = shadow;
-        result[name] = probe;
-      }
+        const probe: Record<string, unknown> = { text: read(getComputedStyle(html), `--${name}`) };
+        for (const [kind, reader] of Object.entries(readers)) {
+          const value = reader(cs);
+          if (value !== undefined) probe[kind] = value;
+        }
+        return probe as Probe;
+      };
+      const result: Record<string, Probe> = {};
+      for (const name of names) result[name] = probeOf(name);
       return result;
     },
     { attrs: appearance.attrs, names },
