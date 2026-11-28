@@ -112,6 +112,54 @@ describe("workflows", () => {
       expect(step).not.toMatch(/\bAPPLE_(ID|PASSWORD|CERTIFICATE)\s*:/);
     }
   });
+
+  it("runs the native app's gate when apps/native changes", () => {
+    // `bun run verify` covers no Rust: without this job a broken apps/native lands green
+    // (specs/native-foundation.md, NF-2).
+    const checks = code(read(`${workflowDir}/checks.yml`));
+    const jobs = checks.split(/\n(?=  [\w-]+:\n)/);
+    const job = (name: string) =>
+      jobs.find((j) => j.startsWith(`\n  ${name}:\n`) || j.startsWith(`  ${name}:\n`)) ?? "";
+
+    const paths = job("oracle-paths");
+    expect(paths).toMatch(/native: \$\{\{ steps\.paths\.outputs\.native \}\}/);
+    expect(paths).toMatch(/apps\/native\/\*[^)]*\) native=true/);
+
+    const native = job("native-check");
+    expect(native).toMatch(/if: needs\.oracle-paths\.outputs\.native == 'true'/);
+    // GitHub's Mac, never the self-hosted one: this runs on any push (ci-release.md).
+    expect(native).toMatch(/runs-on: macos-latest/);
+    expect(native).not.toMatch(/self-hosted/);
+    expect(native).toMatch(/working-directory: apps\/native/);
+    expect(native).toMatch(/rust-toolchain\.toml/);
+    for (const command of [
+      "cargo fmt --all --check",
+      "cargo clippy --locked --all-targets -- -D warnings",
+      "cargo test --locked",
+    ]) {
+      expect(native).toContain(command);
+    }
+
+    const gate = job("static-checks");
+    expect(gate).toMatch(/needs: \[[^\]]*\bnative-check\b/);
+    expect(gate).toMatch(
+      /native-check \$\{\{ needs\.oracle-paths\.outputs\.native \}\} \$\{\{ needs\.native-check\.result \}\}/,
+    );
+  });
+
+  it("keeps native:check and the CI job running the same commands", () => {
+    const script = JSON.parse(read("package.json")).scripts["native:check"] as string;
+    const native =
+      code(read(`${workflowDir}/checks.yml`))
+        .split(/\n(?=  [\w-]+:\n)/)
+        .find((j) => j.startsWith("  native-check:\n")) ?? "";
+    for (const command of script
+      .split("&&")
+      .map((c) => c.trim())
+      .filter((c) => c.startsWith("cargo"))) {
+      expect(native).toContain(command);
+    }
+  });
 });
 
 describe("Workers", () => {
