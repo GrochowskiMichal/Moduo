@@ -12,7 +12,9 @@ fn scratch(name: &str) -> std::path::PathBuf {
 #[test]
 fn a_second_launch_hands_over_to_the_first_and_exits() {
     let dir = scratch("handover");
-    let Claim::First(listener) = claim(&dir).unwrap() else { panic!("the first launch must own the app") };
+    let Claim::First(listener) = claim(&dir).unwrap() else {
+        panic!("the first launch must own the app")
+    };
     assert!(matches!(claim(&dir).unwrap(), Claim::Second));
     let (mut stream, _) = listener.accept().unwrap();
     let mut message = String::new();
@@ -24,7 +26,9 @@ fn a_second_launch_hands_over_to_the_first_and_exits() {
 fn a_socket_left_by_a_crash_is_taken_over() {
     let dir = scratch("stale");
     {
-        let Claim::First(_listener) = claim(&dir).unwrap() else { panic!() };
+        let Claim::First(_listener) = claim(&dir).unwrap() else {
+            panic!()
+        };
         // Dropped without cleaning up, as a crash would leave it.
     }
     assert!(dir.join("instance.sock").exists());

@@ -1,5 +1,6 @@
 //! The main window: what it is called, how big it opens and how small it gets.
 
+use crate::CurrentBackend;
 use moduo_ui::gpui::{
     self, div, prelude::*, px, size, AnyWindowHandle, App, Bounds, Context, Pixels, Size,
     TitlebarOptions, Window, WindowBounds, WindowOptions,
@@ -18,6 +19,16 @@ pub fn min_size() -> Size<Pixels> {
     size(px(1024.), px(700.))
 }
 
+/// "Moduo", and where it is when that is the cloud: changes there are real.
+fn title(cx: &App) -> String {
+    match cx.try_global::<CurrentBackend>() {
+        Some(CurrentBackend(backend)) if backend.is_cloud() => {
+            format!("{TITLE} · {}", backend.label())
+        }
+        _ => TITLE.to_owned(),
+    }
+}
+
 /// A native title bar, centred, and hidden until the first frame is drawn.
 pub fn main_window_options(cx: &App) -> WindowOptions {
     WindowOptions {
@@ -28,7 +39,7 @@ pub fn main_window_options(cx: &App) -> WindowOptions {
         ))),
         window_min_size: Some(min_size()),
         titlebar: Some(TitlebarOptions {
-            title: Some(TITLE.into()),
+            title: Some(title(cx).into()),
             ..Default::default()
         }),
         show: false,
@@ -57,6 +68,25 @@ impl Render for Shell {
             window.on_next_frame(|window, _| window.activate_window());
         }
         let (background, foreground) = moduo_ui::window_colors(cx);
-        div().size_full().bg(background).text_color(foreground)
+        let cloud = cx
+            .try_global::<CurrentBackend>()
+            .is_some_and(|b| b.0.is_cloud());
+        let (alert, alert_text) = moduo_ui::alert_colors(cx);
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .bg(background)
+            .text_color(foreground)
+            .children(cloud.then(|| {
+                div()
+                    .w_full()
+                    .px_4()
+                    .py_0p5()
+                    .bg(alert)
+                    .text_color(alert_text)
+                    .text_xs()
+                    .child("Cloud backend: every change here is a real change to production data.")
+            }))
     }
 }

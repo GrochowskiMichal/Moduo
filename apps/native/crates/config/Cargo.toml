@@ -1,0 +1,11 @@
+[package]
+name = "moduo-config"
+description = "Where the native app's backend is, who it is to macOS, and where it keeps its data."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

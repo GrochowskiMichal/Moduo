@@ -10,7 +10,12 @@ default-run = "moduo-app"
 workspace = true
 
 [dependencies]
+moduo-config = { path = "../config" }
 moduo-ui = { workspace = true }
+tokio = { version = "1", features = ["rt-multi-thread", "time", "net", "sync"] }
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["fmt"] }
 
 [dev-dependencies]
 moduo-ui = { workspace = true, features = ["test-support"] }
