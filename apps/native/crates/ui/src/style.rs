@@ -62,6 +62,14 @@ pub fn hit_min<E: Styled>(element: E, cx: &App) -> E {
     element.min_w(min).min_h(min)
 }
 
+/// A small control (a 16px circle) whose pointer target must reach `--hit-min` without growing
+/// the space it takes: padding grows the bounds GPUI hit-tests, a negative margin gives the space
+/// back. Draw the visible part as a child (a filled box would grow with the padding).
+pub fn hit_min_pad<E: Styled>(element: E, cx: &App) -> E {
+    let pad = (theme::px(cx, Token::HitMin) - crate::space::sp(4.)) / 2.;
+    element.p(pad).m(-pad)
+}
+
 /// A selected row: the tint and an inset ring at the selection edge (`SELECTED_ROW`). The ring is
 /// an inset shadow, as in CSS, so selecting a row never moves its content.
 pub fn selected_row<E: Styled>(element: E, cx: &App) -> E {
