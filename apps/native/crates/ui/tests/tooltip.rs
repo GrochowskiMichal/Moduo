@@ -22,10 +22,15 @@ impl Render for Harness {
 fn opens_after_the_delay(cx: &mut TestAppContext) {
     cx.update(moduo_ui::init);
     let window = cx.add_window(|_, _| Harness);
-    window.update(cx, |_, window, _| window.activate_window()).unwrap();
+    window
+        .update(cx, |_, window, _| window.activate_window())
+        .unwrap();
+    // Let activation land first: it resets the window's pointer to the origin.
+    cx.run_until_parked();
     let h: gpui::AnyWindowHandle = window.into();
     assert_eq!(TOOLTIP_DELAY, Duration::from_millis(150));
-    cx.update_window(h, |_, window, cx| window.hover("save", cx)).unwrap();
+    cx.update_window(h, |_, window, cx| window.hover("save", cx))
+        .unwrap();
     let shown = |cx: &mut TestAppContext| {
         cx.update_window(h, |_, window, cx| {
             window.render_frame(cx);
@@ -34,7 +39,8 @@ fn opens_after_the_delay(cx: &mut TestAppContext) {
         .unwrap()
     };
     assert!(!shown(cx), "not before the delay");
-    cx.executor().advance_clock(TOOLTIP_DELAY + Duration::from_millis(10));
+    cx.executor()
+        .advance_clock(TOOLTIP_DELAY + Duration::from_millis(10));
     cx.run_until_parked();
     assert!(shown(cx), "after the delay");
 }
@@ -43,7 +49,11 @@ fn opens_after_the_delay(cx: &mut TestAppContext) {
 fn the_icon_buttons_label_is_its_tooltip_and_accessible_name(cx: &mut TestAppContext) {
     cx.update(moduo_ui::init);
     let window = cx.add_window(|_, _| Harness);
-    window.update(cx, |_, window, _| window.activate_window()).unwrap();
+    window
+        .update(cx, |_, window, _| window.activate_window())
+        .unwrap();
+    // Let activation land first: it resets the window's pointer to the origin.
+    cx.run_until_parked();
     let h: gpui::AnyWindowHandle = window.into();
     let label = cx
         .update_window(h, |_, window, cx| {
@@ -52,13 +62,17 @@ fn the_icon_buttons_label_is_its_tooltip_and_accessible_name(cx: &mut TestAppCon
         })
         .unwrap();
     assert_eq!(label.as_deref(), Some("Add a task"));
-    cx.update_window(h, |_, window, cx| window.hover("add", cx)).unwrap();
-    cx.executor().advance_clock(TOOLTIP_DELAY + Duration::from_millis(10));
+    cx.update_window(h, |_, window, cx| window.hover("add", cx))
+        .unwrap();
+    cx.executor()
+        .advance_clock(TOOLTIP_DELAY + Duration::from_millis(10));
     cx.run_until_parked();
     let text = cx
         .update_window(h, |_, window, cx| {
             window.render_frame(cx);
-            window.try_find("tooltip").and_then(|t| t.label().map(str::to_owned))
+            window
+                .try_find("tooltip")
+                .and_then(|t| t.label().map(str::to_owned))
         })
         .unwrap();
     assert_eq!(text.as_deref(), Some("Add a task"));
