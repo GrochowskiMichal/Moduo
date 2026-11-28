@@ -19,8 +19,8 @@ name: checks
 #
 # `static-checks` is the one required context. It always runs and fails unless the secret scan
 # and the decisions check passed and lint, every test shard and the ratchets passed (a new .only fails the weakening
-# detector), or a docs-only PR skipped them, and each oracle (db-test, rust-check, e2e-smoke)
-# passed or was skipped because none of its paths changed.
+# detector), or a docs-only PR skipped them, and each oracle (db-test, rust-check, native-check,
+# e2e-smoke) passed or was skipped because none of its paths changed.
 on:
   pull_request:
     branches: [develop]
@@ -208,6 +208,7 @@ jobs:
     outputs:
       db: ${{ steps.paths.outputs.db }}
       rust: ${{ steps.paths.outputs.rust }}
+      native: ${{ steps.paths.outputs.native }}
       e2e: ${{ steps.paths.outputs.e2e }}
     env:
       EVENT: ${{ github.event_name }}
@@ -226,7 +227,7 @@ jobs:
       - name: Which oracles does this change need?
         id: paths
         run: |
-          db=false rust=false e2e=false
+          db=false rust=false native=false e2e=false
           if [ "$EVENT" = "pull_request" ]; then
             files=$(git diff --name-only --no-renames "$PR_BASE...$PR_HEAD")
           elif [ -n "$BEFORE" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
@@ -249,11 +250,15 @@ jobs:
               apps/desktop/src-tauri/*) rust=true ;;
             esac
             case "$f" in
+              # The native app, and the two sources its exported JSON comes from (NF-3, NT-1).
+              apps/native/*|apps/app/src/styles/tokens.css|supabase/functions/_shared/contracts/*) native=true ;;
+            esac
+            case "$f" in
               # The web app, what it imports through aliases, and the toolchain it builds with.
               apps/app/*|e2e/*|assets/*|release-notes/*|supabase/functions/_shared/*|scripts/agent/e2e-env.ts|VERSION|tsconfig*.json|package.json|bun.lock|.nvmrc|.bun-version) e2e=true ;;
             esac
             if [ "$f" = .github/workflows/checks.yml ] && [ "$EVENT" != "pull_request" ]; then
-              db=true rust=true e2e=true
+              db=true rust=true native=true e2e=true
             fi
           done <<< "$files"
           # A fork's run gets no secrets, so it can't decrypt prod's schema snapshot: its SQL
@@ -262,8 +267,8 @@ jobs:
             echo "Pull request from a fork: db-test is skipped here and runs on the push after merge."
             db=false
           fi
-          echo "db-test: $db · rust-check: $rust · e2e-smoke: $e2e"
-          { echo "db=$db"; echo "rust=$rust"; echo "e2e=$e2e"; } >> "$GITHUB_OUTPUT"
+          echo "db-test: $db · rust-check: $rust · native-check: $native · e2e-smoke: $e2e"
+          { echo "db=$db"; echo "rust=$rust"; echo "native=$native"; echo "e2e=$e2e"; } >> "$GITHUB_OUTPUT"
 
   # The SQL/RLS tests (supabase/tests, `bun run db:test`) on a throwaway Supabase stack in the
   # runner, built like `bun run local:reset`: prod's schema snapshot, then the repo migrations
@@ -373,6 +378,48 @@ jobs:
       - name: cargo test --lib
         run: cargo test --locked --lib
 
+  # The native GPUI app (apps/native, .claude/rules/native-rust.md): its own Cargo workspace and
+  # gate, the same commands as `bun run native:check`. GPUI draws with Metal, so GitHub's Mac, and
+  # never the self-hosted one (this runs on any push).
+  native-check:
+    needs: oracle-paths
+    if: needs.oracle-paths.outputs.native == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/native
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Read Rust toolchain
+        id: toolchain
+        run: echo "channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ steps.toolchain.outputs.channel }}
+          components: rustfmt, clippy
+
+      # Saved by push runs only, as rust-check's.
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: apps/native
+          shared-key: native-check-macos
+          save-if: ${{ github.event_name == 'push' }}
+
+      - name: cargo fmt
+        run: cargo fmt --all --check
+
+      - name: cargo clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test --locked
+
   # The web app boots and its signed-out pages render (e2e/smoke, `bun run e2e:smoke`). Supabase
   # points at a port nothing listens on, so the run never reaches prod. The signed-in suites need
   # the local stack and stay `bun run e2e`.
@@ -471,7 +518,7 @@ jobs:
   # ── end HV-5 ────────────────────────────────────────────────────────────────────────────
 
   static-checks:
-    needs: [scan, lint, decisions, unit-tests, oracle-paths, db-test, rust-check, e2e-smoke, ratchets, test-weakening]
+    needs: [scan, lint, decisions, unit-tests, oracle-paths, db-test, rust-check, native-check, e2e-smoke, ratchets, test-weakening]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -489,6 +536,7 @@ jobs:
           ORACLES: >-
             db-test ${{ needs.oracle-paths.outputs.db }} ${{ needs.db-test.result }}
             rust-check ${{ needs.oracle-paths.outputs.rust }} ${{ needs.rust-check.result }}
+            native-check ${{ needs.oracle-paths.outputs.native }} ${{ needs.native-check.result }}
             e2e-smoke ${{ needs.oracle-paths.outputs.e2e }} ${{ needs.e2e-smoke.result }}
         run: |
           echo "scan: $SCAN · code change: $CODE · lint: $LINT · unit-tests: $TESTS"

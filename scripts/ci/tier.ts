@@ -68,6 +68,9 @@ export const TIER2: readonly Tier2Rule[] = [
   { glob: "scripts/ci/**", why: "CI gates (this list, ratchets, weakening detector)" },
   { glob: ".claude/hooks/guard-*", why: "agent guards" },
   { glob: ".claude/settings.json", why: "agent permissions" },
+  { glob: "apps/native/crates/auth/**", why: "native auth" },
+  { glob: "apps/native/crates/config/**", why: "native identity and keys" },
+  { glob: "apps/native/Cargo.toml", why: "native dependency pins" },
 ];
 
 export function globToRegExp(glob: string): RegExp {
