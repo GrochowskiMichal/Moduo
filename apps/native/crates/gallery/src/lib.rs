@@ -4,6 +4,7 @@
 mod controls_page;
 mod fields_page;
 mod floating_page;
+mod menus_page;
 mod static_page;
 mod tokens_page;
 
@@ -30,6 +31,7 @@ pub fn pages() -> Vec<Box<dyn Page>> {
         Box::new(controls_page::ControlsPage),
         Box::new(fields_page::FieldsPage),
         Box::new(floating_page::FloatingPage),
+        Box::new(menus_page::MenusPage::default()),
     ]
 }
 
